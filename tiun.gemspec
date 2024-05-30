@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
 
   spec.summary       = %q{Tiun is a backend gem for admin rails application.}
   spec.description   = %q{Tiun is an old russian high level manager for a city from a prince or boyar. According the repo tiun is a backend gem for admin rails application.}
-  spec.homepage      = "https://github.com/majioa/tiun"
+  spec.homepage      = "https://codeberg.org/znamenica/tiun"
   spec.license       = "MIT"
 
   # Prevent pushing this gem to RubyGems.org. To allow pushes either set the 'allowed_push_host'
