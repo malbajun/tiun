@@ -16,7 +16,7 @@ module Tiun::Policy
    end
 
    def match? allowing_permissions
-      (user.permissions & allowing_permissions).any?
+      user && (user.permissions & allowing_permissions).any?
    end
 
    def scope
