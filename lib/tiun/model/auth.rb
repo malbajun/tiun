@@ -39,11 +39,16 @@ module Tiun::Model::Auth
 
    def update_session token
       refresh_token =
-         if token.is_a?(Token::Refresh)
+         case token
+         when Token::Refresh
             token
-         elsif token.is_a?(Hash)
+         when Token::Validate
+            Token::Refresh.create(tokenable: self)
+         when Hash
             Token::Refresh.actual.find_by_code(token["code"])
-         end || raise(InvalidTokenError.new(token))
+         else
+            raise(InvalidTokenError.new(token))
+         end
 
       {
          session_token: Token::Session.create(tokenable: self),
