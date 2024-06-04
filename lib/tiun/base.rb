@@ -34,7 +34,7 @@ module Tiun::Base
       before_action :fetch_ac_objects, only: %i(ac)
       before_action :parse_range, only: %i(index ac)
       after_action :return_range, only: %i(index ac)
-      before_action :authorize!
+      # before_action :authorize!
 
       rescue_from Exception, with: :exception
       rescue_from ActionView::MissingTemplate, with: :missing_template
