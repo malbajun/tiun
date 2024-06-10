@@ -370,9 +370,7 @@ module Tiun::Base
 
          if model.respond_to?("by_#{arg}")
             rel.send("by_#{arg}", params[arg])
-         elsif model.respond_to?("by_#{arg.alias}")
-            rel.send("by_#{arg.alias}", params[arg])
-         elsif model.attribute_names.include?(arg.alias || arg.name)
+         elsif model.attribute_names.include?(arg)
             rel.where({ arg => params[arg] })
          else
             raise InvalidParamNameError.new("Not valid rule to fetch object by #{arg_name} argument")
