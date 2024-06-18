@@ -43,7 +43,7 @@ module Tiun::Base
                   ActiveRecord::RecordInvalid,
                   ActiveRecord::RecordNotSaved,
                   CarrierWave::IntegrityError, with: :unprocessable_entity
-      rescue_from ActiveRecord::RecordNotFound, with: :not_found
+      rescue_from ActiveRecord::RecordNotFound, InvalidParamNameError, with: :not_found
       rescue_from OutOfRangeError, with: :out_of_range
 
 #      has_scope :with_token, only: %i(index all)
@@ -368,12 +368,18 @@ module Tiun::Base
       args.reduce(model) do |rel, arg|
          next rel unless params.include?(arg)
 
-         if model.respond_to?("by_#{arg}")
-            rel.send("by_#{arg}", params[arg])
-         elsif model.attribute_names.include?(arg)
-            rel.where({ arg => params[arg] })
-         else
-            raise InvalidParamNameError.new("Not valid rule to fetch object by #{arg_name} argument")
+         arg_prop = tiun_args.find { |x| arg == x.name }
+
+         [arg, arg_prop.alias&.split(',')].flatten.compact.reduce(rel) do |rel_in, attr_name|
+            if model.respond_to?("by_#{attr_name}")
+               rel.send("by_#{attr_name}", params[arg])
+            elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/
+               rel.send(attr_name)
+            elsif model.attribute_names.include?(attr_name)
+               rel.where({ attr_name => params[arg] })
+            else
+               rel
+            end
          end
       end
    end
