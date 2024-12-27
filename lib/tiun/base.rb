@@ -330,14 +330,14 @@ module Tiun::Base
 
    # callbacks
    def parse_range
-     @range =
-        if /(?<b>[0-9]+)-(?<e>[0-9]+)/ =~ request.headers["Range"]
-          (b.to_i..e.to_i - 1)
-        else
-           ((page - 1) * per..(page - 1) * per + per - 1)
-        end
+      @range =
+         if /(?<b>[0-9]+)-(?<e>[0-9]+)/ =~ request.headers["Range"]
+            (b.to_i..e.to_i - 1)
+         else
+            ((page - 1) * per..(page - 1) * per + per - 1)
+         end
 
-     raise OutOfRangeError if total > 0 && @range.begin >= total || @range.end < @range.begin
+      raise OutOfRangeError if total > 0 && @range.begin >= total || @range.end < @range.begin
    end
 
    def new_object
@@ -370,7 +370,7 @@ module Tiun::Base
 
          arg_prop = tiun_args.find { |x| arg == x.name }
 
-         [arg, arg_prop.alias&.split(',')].flatten.compact.reduce(rel) do |rel_in, attr_name|
+         [arg, arg_prop&.alias&.split(',')].flatten.compact.reduce(rel) do |rel_in, attr_name|
             if model.respond_to?("by_#{attr_name}")
                rel.send("by_#{attr_name}", params[arg])
             elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/

@@ -4,6 +4,7 @@ require 'tiun/auth'
 module Tiun::Auth::Controller
    class NoTokenError < StandardError; end
    class InvalidTokenError < StandardError; end
+   class UnauthorizedError < StandardError; end
 
    extend ActiveSupport::Concern
 
@@ -19,6 +20,7 @@ module Tiun::Auth::Controller
       after_action :drop_auth, only: %i(destroy)
 
       rescue_from Exception, with: :exception
+      rescue_from UnauthorizedError, with: :unauthorized
       rescue_from ActiveRecord::RecordNotFound, with: :unauthenticated
       rescue_from Tiun::Model::Account::InvalidPasswordError, with: :unauthenticated
       rescue_from NoTokenError, InvalidTokenError, with: :invalid_token
@@ -94,6 +96,10 @@ module Tiun::Auth::Controller
       render_code 401
    end
 
+   def unauthorized e
+      render_code 403
+   end
+
    def render_code code
       args = params.permit(*permitted_filter).to_h
       res = { status: code, json: { args: args }}
@@ -149,7 +155,7 @@ module Tiun::Auth::Controller
       end
 
       attrs = { code: token, type: "Token::#{type[0..7].camelcase}", obsoleted_at: nil }
-      @token = Token.where(attrs).first || raise(InvalidTokenError)
+      @token = Token.where(attrs).first || raise(ActiveRecord::RecordNotFound)
    end
 
    def require_token_table
@@ -184,11 +190,13 @@ module Tiun::Auth::Controller
          else
             account&.authenticated_user!(parms[:password])
          end
-   rescue
    end
 
    def authorize!
-      @current_user ||= @token.tokenable.is_a?(user_model) ? @token.tokenable : @token.tokenable.user
+      @current_user ||=
+         if @token
+            @token.tokenable.is_a?(user_model) ? @token.tokenable : @token.tokenable.user
+         end || raise(UnauthorizedError)
    end
 
    def _permitted_filter
