@@ -394,12 +394,17 @@ module Tiun
       rescue NameError
       end
 
+      def base_models
+         @base_models ||= {}
+      end
+
       def table_exist? name
          ActiveRecord::Base.connection.data_source_exists?(name.to_s.tableize)
       end
 
       def base_model name = nil
-         @base_model ||= table_exist?(name) ? ActiveRecord::Base : ActiveModel::Model
+         base_models[name] ||= table_exist?(name) ?
+            (defined?(ApplicationRecord) ?  ApplicationRecord : ActiveRecord::Base) : ActiveModel::Model
       end
 
       def base_controller
