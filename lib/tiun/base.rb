@@ -365,12 +365,15 @@ module Tiun::Base
    end
 
    def apply_scope model = self.model, args = []
-      args.reduce(model) do |rel, arg|
-         next rel unless params.include?(arg)
+      args.reduce(model) do |rel, arg_in|
+         arg_prop = tiun_args.find { |x| arg_in == x.name }
+         names = [arg_in, arg_prop&.alias&.split(',')].flatten.compact
+         param_names = params.keys & names
 
-         arg_prop = tiun_args.find { |x| arg == x.name }
+         next rel unless param_names.any?
 
-         [arg, arg_prop&.alias&.split(',')].flatten.compact.reduce(rel) do |rel_in, attr_name|
+         arg = param_names.first || arg_in
+         names.reduce(rel) do |rel, attr_name|
             if model.respond_to?("by_#{attr_name}")
                rel.send("by_#{attr_name}", params[arg])
             elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/
@@ -378,6 +381,7 @@ module Tiun::Base
             elsif model.attribute_names.include?(attr_name)
                rel.where({ attr_name => params[arg] })
             else
+               # Kernel.puts "WARN: Invalid scope by property '#{attr_name}'"
                rel
             end
          end
