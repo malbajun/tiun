@@ -96,7 +96,7 @@ module Tiun
          end
       end
 
-      def controller_name_for context
+      def object_name_for context
          if type = find_type(kind_for(context))
             type.controller || type.model || type.name
          else
@@ -106,6 +106,36 @@ module Tiun
          end
       end
 
+      # => "api/v1/session" inferred from path
+      def controller_name_base_for context
+         context.controller ||
+            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/create|(?<ccc>[^:]+))).json} =~ context.path
+               c || cc || ccc
+            elsif type = find_type(kind_for(context))
+               type.controller || type.model || type.name
+            end ||
+               context.name.split(".").first ||
+                  error(:no_controller_name_defined, { name: context.name }, InvalidControllerError)
+      end
+
+      # => "api/v1/session" => api_v1_session inferred from path
+      def as_prefix_base_for context
+         context.as ||
+            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/create|(?<ccc>[^:]+))).json} =~ context.path
+               if c
+                  c.singularize
+               elsif cc
+                  "create_#{cc.singularize}"
+               else
+                  ccc.pluralize
+               end
+            elsif type = find_type(kind_for(context))
+               type.controller || type.model || type.name
+            end ||
+               context.name.split(".").first ||
+                  error(:no_controller_name_defined, { name: context.name }, InvalidControllerError)
+      end
+
       def model_title_for context
          name = model_name_for(context)
 
@@ -113,19 +143,19 @@ module Tiun
       end
 
       def controller_title_for context
-         name = controller_name_for(context)
-
-         name ? name.pluralize.camelize + 'Controller' : raise(InvalidControllerError)
+         controller_name_base_for(context).pluralize.camelize + 'Controller'
       end
 
       def controller_default_arg_for context
          context.key || /:(?<arg>[^\.]+)/.match(context.path)&.[](:arg)
       end
 
-      def route_title_for context
-         name = controller_name_for(context)
+      def route_controller_title_for context
+         controller_name_base_for(context).pluralize.tableize
+      end
 
-         name ? name.pluralize.tableize : raise(InvalidControllerError)
+      def route_as_prefix_for context
+         as_prefix_base_for(context).parameterize.underscore
       end
 
       def table_title_for context
@@ -277,7 +307,8 @@ module Tiun
       def load_routes_from config
          @routes =
          config_reduce(config, routes) do |r, name, context|
-            controller = route_title_for(context)
+            controller = route_controller_title_for(context)
+            as_prefix = route_as_prefix_for(context)
             actions = action_names_for(context)
 
             actions.reduce(r) do |res, (action, method)|
@@ -288,7 +319,7 @@ module Tiun
                   "#{pre}:#{key}#{post}" || context.path
 
                if res.select {|x| x[:uri] == path && x[:kind] == action }.blank?
-                  attrs = { uri: path, path: "#{controller}##{action}", kind: method.name }
+                  attrs = { uri: path, path: "#{controller}##{action}", kind: method.name, as: as_prefix }
                   attrs = attrs.merge(options: {defaults: { format: format }, constraints: { format: format }}) if format
 
                   res | [attrs]
@@ -419,8 +450,10 @@ module Tiun
          ::Tiun::Base
       end
 
-      def error code, options
+      def error code, options, exception = nil
          errors << { code: code, options: options }
+
+         exception ? raise(exception) : errors.last
       end
 
       def valid?
