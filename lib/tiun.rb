@@ -193,13 +193,14 @@ module Tiun
       def sublings_for type_name_in, kind_in = %i(read write)
         kind = [kind_in].flatten
 
-        type_attributes_for(type_name_in, kind).reduce({}) do |res, value_in|
-           if value_in.is_a?(Hash)
-              res.merge(value_in)
-           else
-              res
+        sublings["#{type_name_in}:#{kind.join(',')}"] ||=
+           type_attributes_for(type_name_in, kind).reduce({}) do |res, value_in|
+              if value_in.is_a?(Hash)
+                 res.merge(value_in)
+              else
+                 res
+              end
            end
-        end
       end
 
       # +type_attributes_for+ renders attributes array for the type name or type itself specified,
@@ -210,11 +211,23 @@ module Tiun
 
          return [] unless type
 
-         type.fields.map do |x|
-            next nil unless x.to_h.keys.select { |y| /only$/ =~ y }.reduce(kind)  { |k, prop| x[prop] ? ["#{prop}".sub("only","").to_sym] & k : k }.any?
+         (type.with.is_a?(Array) ? type.with : type.with.to_s.split(/\s*,\s*/)).reduce(type.fields) do |res, x|
+            if i = res.index {|y| y.name == x }
+               res[0...i] | [res[i].merge({rela: true}) ] | res[i + 1..-1]
+            else
+               res | [{name: x, rela: true}.to_os]
+            end
+         end.map do |x|
+            next nil unless x.to_h.keys.select do |y|
+                  /only$/ =~ y
+               end.reduce(kind) do |k, prop|
+                  x[prop] ? ["#{prop}".sub("only","").to_sym] & k : k
+               end.any?
 
             if sub = Tiun.find_type(x.kind)
                { x.name => type_attributes_for(sub, kind) }
+            elsif x.rela
+               { x.name => nil }
             else
                x.name
             end
@@ -361,6 +374,10 @@ module Tiun
 
       def types
          @types ||= []
+      end
+
+      def sublings
+         @sublings ||= {}
       end
 
       def models

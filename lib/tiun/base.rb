@@ -67,9 +67,9 @@ module Tiun::Base
 
       respond_to do |format|
          format.html
-         format.json { render json: serialize(object) }
+         format.json { render json: serialize(reloaded_object) }
          format.jsonp { head :ok }
-         format.any { render json: serialize(object), content_type: 'application/json' }
+         format.any { render json: serialize(reloaded_object), content_type: 'application/json' }
       end
    end
 
@@ -79,9 +79,9 @@ module Tiun::Base
 
       respond_to do |format|
          format.html
-         format.json { render json: serialize(object) }
+         format.json { render json: serialize(reloaded_object) }
          format.jsonp { head :ok }
-         format.any { render json: serialize(object), content_type: 'application/json' }
+         format.any { render json: serialize(reloaded_object), content_type: 'application/json' }
       end
    end
 
@@ -106,8 +106,6 @@ module Tiun::Base
          format.jsonp { head :ok }
          format.any { render json: answer, content_type: 'application/json' }
       end
-   rescue Exception
-     binding.pry
    end
 
    # GET /<objects>/ac.json
@@ -132,6 +130,10 @@ module Tiun::Base
 
    def code
       total == 0 ? 204 : total > range.end + 1 ? 206 : 200
+   end
+
+   def model_name
+      @_model_name ||= Tiun.find_type(tiun_context[action_name]&.kind)&.model || super
    end
 
    def param_name
@@ -340,16 +342,20 @@ module Tiun::Base
       raise OutOfRangeError if total > 0 && @range.begin >= total || @range.end < @range.begin
    end
 
+   def reloaded_object
+      with_others(object_scope.base_class.where(object.primary_key => object[object.primary_key])).first
+   end
+
    def new_object
       @object = model.new(permitted_params)
    end
 
    def fetch_object
-      @object = object_scope.first || raise(ActiveRecord::RecordNotFound)
+      @object = with_others(object_scope).first || raise(ActiveRecord::RecordNotFound)
    end
 
    def fetch_objects
-      @objects = objects
+      objects
    end
 
    def fetch_ac_objects
@@ -393,9 +399,15 @@ module Tiun::Base
 
       Tiun.sublings_for(k, :write).reduce(rela) do |r, (sub, props)|
          if r.respond_to?("with_#{sub}")
-            r.send("with_#{sub}", context.merge(only: props))
+            attrs = props ? {only: props} : {}
+
+            begin
+               r.send("with_#{sub}", context.merge(attrs))
+            rescue ArgumentError
+               r.send("with_#{sub}")
+            end
          else
-            #TODO raise?
+            # Kernel.puts "WARN: Invalid scope by property '#{attr_name}'"
             r
          end
       end
