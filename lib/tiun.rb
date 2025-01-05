@@ -211,7 +211,7 @@ module Tiun
 
          return [] unless type
 
-         (type.with.is_a?(Array) ? type.with : type.with.to_s.split(/\s*,\s*/)).reduce(type.fields) do |res, x|
+         (type.with.is_a?(Array) ? type.with : type.with.to_s.split(/\s*,\s*/)).reduce(type.fields || []) do |res, x|
             if i = res.index {|y| y.name == x }
                res[0...i] | [res[i].merge({rela: true}) ] | res[i + 1..-1]
             else
@@ -226,6 +226,8 @@ module Tiun
 
             if sub = Tiun.find_type(x.kind)
                { x.name => type_attributes_for(sub, kind) }
+            elsif x.source
+               { x.name => x.source.to_s }
             elsif x.rela
                { x.name => nil }
             else

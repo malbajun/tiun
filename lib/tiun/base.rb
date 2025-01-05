@@ -373,7 +373,7 @@ module Tiun::Base
    def apply_scope model = self.model, args = []
       args.reduce(model) do |rel, arg_in|
          arg_prop = tiun_args.find { |x| arg_in == x.name }
-         names = [arg_in, arg_prop&.alias&.split(',')].flatten.compact
+         names = [arg_prop&.source || arg_in, arg_prop&.alias&.split(',')].flatten.compact
          param_names = params.keys & names
 
          next rel unless param_names.any?
