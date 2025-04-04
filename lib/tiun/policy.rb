@@ -11,16 +11,18 @@ module Tiun::Policy
       true
    end
 
-   def show?
-      scope.where(id: record.id).exists?
-   end
+#   def show?
+#      scope.where(id: record.id).exists?
+#   end
 
    def match? allowing_permissions
       user && (user.permissions & allowing_permissions).any?
    end
 
    def scope
-      defined?(Pundit) && Pundit.policy_scope!(user, record.class) || ActiveRecord::Base
+      defined?(Pundit) && Pundit.policy_scope!(user, record.class) || raise
+   rescue
+      Scope.new(user, record.class)
    end
 
    class Scope

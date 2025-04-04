@@ -9,21 +9,23 @@ module Tiun::Auth::Controller
    extend ActiveSupport::Concern
 
    included do
+      include ActionController::RequestForgeryProtection
       include Tiun::Auth
 
+      protect_from_forgery only: :create, with: :exception, prepend: true
+
       before_action :set_languages
-      before_action :authenticate
       before_action :fetch_token, only: %i(update show destroy)
-      before_action :authorize!, only: %i(create update show destroy)
       after_action :obsolete_token, only: %i(update show destroy)
       after_action :session_update, only: %i(create update show destroy)
       after_action :drop_auth, only: %i(destroy)
 
-      rescue_from Exception, with: :exception
+      rescue_from Exception, with: :server_error
       rescue_from UnauthorizedError, with: :unauthorized
       rescue_from ActiveRecord::RecordNotFound, with: :unauthenticated
       rescue_from Tiun::Model::Account::InvalidPasswordError, with: :unauthenticated
-      rescue_from NoTokenError, InvalidTokenError, with: :invalid_token
+      rescue_from ActionController::InvalidAuthenticityToken, with: :unauthenticated
+      rescue_from NoTokenError, InvalidTokenError, with: :not_found
    end
 
    # POST /session.json
@@ -92,31 +94,6 @@ module Tiun::Auth::Controller
      @account_model ||= account_model_name.constantize
    end
 
-   def unauthenticated e
-      render_code 401
-   end
-
-   def unauthorized e
-      render_code 403
-   end
-
-   def render_code code
-      args = params.permit(*permitted_filter).to_h
-      res = { status: code, json: { args: args }}
-
-      args.present? ? render(**res) : head(code)
-   end
-
-   def invalid_token e
-      render_code 404
-   end
-
-   def exception e
-      error = "[#{e.class}]{exception}> #{e.message} \n\t #{e.backtrace.join("\n\t")}"
-      args = params.permit(*permitted_filter).to_h
-      render json: { args: args, error: error }, status: 500
-   end
-
    def locales
       I18n.available_locales
    end
@@ -183,22 +160,6 @@ module Tiun::Auth::Controller
          end# || raise(ActiveRecord::RecordNotFound)
    end
 
-   def authenticate
-      @current_user ||=
-         if session["user"]
-            User.find_by_id(session["user"]["id"])
-         else
-            account&.authenticated_user!(parms[:password])
-         end
-   end
-
-   def authorize!
-      @current_user ||=
-         if @token
-            @token.tokenable.is_a?(user_model) ? @token.tokenable : @token.tokenable.user
-         end || raise(UnauthorizedError)
-   end
-
    def _permitted_filter
       @_permitted_filter ||= {}
    end
@@ -217,20 +178,24 @@ module Tiun::Auth::Controller
    end
 
    def session_update
-      session.update("user" => session_data)
-   rescue ActiveRecord::RecordNotFound
-      session.update("user" => nil)
+      if current_user
+         session.update("user" => session_data)
+      else
+         session.delete('user')
+      end
    end
 
    def current_user
-      @current_user ||= authenticate
+      @current_user ||= super || account&.authenticated_user!(parms[:password])
    end
 
    def session_data
       #@current_user&.jsonize(only: %w(id last_login_at last_active_at accounts refresh_token session_token))
+#            session_data = serialize_collection(user.update_session(session["user"]["refresh_token"]), auth_context)
+#            session.update("user" => session["user"].merge(session_data))
 
       @session_data ||= current_user_data.merge(serialize_collection(@session))
    end
 end
 
-Auth::Controller = Tiun::Auth::Controller
+#::Auth::Controller = Tiun::Auth::Controller

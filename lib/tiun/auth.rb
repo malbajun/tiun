@@ -1,24 +1,23 @@
+# cuccon auth methods for all controllers
 module Tiun::Auth
    extend ActiveSupport::Concern
 
    included do
       before_action :authenticate_user
+      before_action :authorize!, if: -> { current_user }
    end
 
    # TODO add automatic with list
    def current_user
-      @current_user ||=
-        #if session["user"] && user = User.where(id: session["user"]["id"]).first
-         if session["user"] && user = User.with_user_names(auth_context).with_descriptions(auth_context).with_accounts(auth_context).where(id: session["user"]["id"]).first
-            session_data = serialize_collection(user.update_session(session["user"]["refresh_token"]), auth_context)
-            session.update("user" => session["user"].merge(session_data))
+      @current_user ||= session["user"] && user
+   end
 
-            user
-         end
-   rescue Tiun::Model::Auth::InvalidTokenError
-      session.delete('user')
-
-      nil
+   def user context = auth_context
+      @user ||= User.with_user_names(context)
+                    .with_descriptions(context)
+                    .with_accounts(context)
+                    .where(id: session["user"]&.[]("id"))
+                    .first
    end
 
    def authenticate_user
@@ -79,6 +78,22 @@ module Tiun::Auth
 
    def serialize object, context = self.context
       object.as_json(context.merge(only: get_properties(object)))
+   end
+
+   def policy
+      @_policy ||= "#{model_name}Policy".constantize
+   rescue NameError
+      nil
+   end
+
+   def authorize!
+      pol = policy&.new(current_user, object)
+
+      if pol.respond_to?(action_name + "?") && !pol.send(action_name + "?") ||
+          pol.respond_to?(:match?) && self.respond_to?(:allowing_permission) && !pol.match?(allowing_permission)
+
+         raise Tiun::Policy::NotAuthorizedError, "not allowed to perform '#{action_name}' this with '#{@object.inspect}'"
+      end
    end
 end
 

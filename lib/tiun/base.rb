@@ -36,7 +36,7 @@ module Tiun::Base
       after_action :return_range, only: %i(index ac)
       # before_action :authorize!
 
-      rescue_from Exception, with: :exception
+      rescue_from Exception, with: :server_error
       rescue_from ActionView::MissingTemplate, with: :missing_template
       rescue_from ActionController::ParameterMissing, with: :unprocessable_entity
       rescue_from ActiveRecord::RecordNotUnique,
@@ -45,6 +45,8 @@ module Tiun::Base
                   CarrierWave::IntegrityError, with: :unprocessable_entity
       rescue_from ActiveRecord::RecordNotFound, InvalidParamNameError, with: :not_found
       rescue_from OutOfRangeError, with: :out_of_range
+      rescue_from Tiun::Model::Auth::InvalidTokenError, with: :unauthenticated
+      rescue_from Tiun::Policy::NotAuthorizedError, with: :unauthorized
 
 #      has_scope :with_token, only: %i(index all)
 #      has_scope :with_tokens, only: %i(index), type: :array
@@ -148,50 +150,60 @@ module Tiun::Base
 #      @list_serializer ||= "#{model_name}ListSerializer".constantize
 #   end
 #
-   def policy
-      @_policy ||= "#{model_name}Policy".constantize
-   end
-
 #   def objects_serializer
 #      list_serializer.new(model: model)
 #   end
 #
-#   def policy_name
-#      @policy_name ||= Object.const_get(model.name + "Policy")
-#   rescue NameError
-#      @policy_name = Object.const_get("Tiun::#{model.name}Policy")
-#   end
-#
+   def unauthenticated _e
+      render_code 401
+   end
+
+   def unauthorized _e
+     binding.pry
+      render_code 403
+   end
+
    def not_found _e
-      render json: { args: params.permit(*permitted_filter).to_h }, status: 404
+      render_code 404
    end
 
    def out_of_range _e
-      render json: { args: params.permit(*permitted_filter).to_h }, status: 416
+      render_code 416
    end
 
    def unprocessable_entity e
-      errors = @object && @object.errors.any? && @object.errors.to_a || [e.to_s]
-      args = params.permit(*permitted_filter).to_h
-      render json: { args: args, error: errors }, status: :unprocessable_entity
+      render_code :unprocessable_entity, e
    end
 
    def parameter_missing e
-      errors = ["[#{e.class}]{parameter_missing}> #{e.message} \n\t #{e.backtrace.join("\n\t")}"]
-      args = params.permit(*permitted_filter).to_h
-      render json: { args: args, error: errors }, status: 500
+      render_code 500, e
    end
 
    def missing_template e
-      errors = ["[#{e.class}]{missing_template}> #{e.message} \n\t #{e.backtrace.join("\n\t")}"]
-      args = params.permit(*permitted_filter).to_h
-      render json: { args: args, error: errors }, status: 500
+      render_code 500, e
    end
 
-   def exception e
-      errors = ["[#{e.class}]{exception}> #{e.message} \n\t #{e.backtrace.join("\n\t")}"]
+   def server_error e
+      render_code 500, e
+   end
+
+   def render_code code, e = nil
+     binding.pry
       args = params.permit(*permitted_filter).to_h
-      render json: { args: args, error: errors }, status: 500
+      res = { status: code, json: { args: args }}
+
+      if errors = @object && @object.errors.any? && @object.errors.to_a
+         res[:json][:errors] = errors
+      end
+
+      if e
+         /`(?<method>(?:with_(?<rela>\w+)|[^']*))'/ =~ caller.grep(%r{tiun/base})[1]
+         trace = "[#{e.class}]{#{method}}> #{e.message} \n\t #{e.backtrace.join("\n\t")}" if with_trace
+
+         res[:json][:trace] = trace
+      end
+
+      args.present? ? render(**res) : head(code)
    end
 
    def ac_limit
@@ -286,15 +298,6 @@ module Tiun::Base
       object.jsonize(context.merge(only: get_properties))
 #         format.json { render :show, json: @object, locales: @locales,
 #                                     serializer: serializer }
-   end
-
-   def authorize!
-      pol = policy.new(current_user, @object)
-
-      if pol.respond_to?(action_name + "?") && !pol.send(action_name + "?") ||
-         pol.respond_to?(:match?) && !pol.match?(allowing_permission)
-         raise Tiun::Policy::NotAuthorizedError, "not allowed to do #{action_name} this #{@object.inspect}"
-      end
    end
 
    def per

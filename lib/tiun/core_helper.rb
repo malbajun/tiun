@@ -1,5 +1,7 @@
+require 'action_view'
+
 module ::Tiun::CoreHelper
-   include ActionView::Helpers::TagHelper
+   include ::ActionView::Helpers::TagHelper
 
    def react_component name, props = {}, options = {}, &block
       html_options = options.reverse_merge(data: {

@@ -46,9 +46,11 @@ module Tiun::Model::Auth
             Token::Refresh.create(tokenable: self)
          when Hash
             Token::Refresh.actual.find_by_code(token["code"])
+         when NilClass
+            nil
          else
             raise(InvalidTokenError.new(token))
-         end
+         end || Token::Refresh.create(tokenable: self)
 
       {
          session_token: Token::Session.create(tokenable: self),
