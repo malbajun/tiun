@@ -24,7 +24,7 @@ module Tiun::Base
 #      include Pundit
 
       before_action :set_languages, if: ->{ respond_to?(:set_languages) }
-      before_action :authenticate_user
+ #     before_action :authenticate_user
 #      before_action :set_tokens, only: %i(index)
 #      before_action :set_page, only: %i(index)
 #      before_action :set_locales
@@ -188,7 +188,6 @@ module Tiun::Base
    end
 
    def render_code code, e = nil
-     binding.pry
       args = params.permit(*permitted_filter).to_h
       res = { status: code, json: { args: args }}
 
@@ -369,8 +368,24 @@ module Tiun::Base
       apply_scope(model, [default_arg || model.primary_key])
    end
 
+   def scope_args
+      tiun_args.reduce({}) do |res,x|
+         if value = params[x.name] || params[x.alias]
+            res[x.name.to_sym] = value
+         end
+
+         res
+      end
+   end
+
    def objects_scope
       apply_scope(model, tiun_args.map { |a| a.name })
+   end
+
+   def is_arg_requires_skip? arg_in
+      skip = tiun_args.find {|x| x.name == arg_in }&.skip
+
+      return true if skip.to_s =~ /scope/
    end
 
    def apply_scope model = self.model, args = []
@@ -379,7 +394,7 @@ module Tiun::Base
          names = [arg_prop&.source || arg_in, arg_prop&.alias&.split(',')].flatten.compact
          param_names = params.keys & names
 
-         next rel unless param_names.any?
+         next rel unless param_names.any? && !is_arg_requires_skip?(arg_in)
 
          arg = param_names.first || arg_in
          names.reduce(rel) do |rel, attr_name|
@@ -397,7 +412,7 @@ module Tiun::Base
       end
    end
 
-   def with_others rela
+   def with_others rela, args = self.scope_args
       k = tiun_context[action_name]&.kind
 
       Tiun.sublings_for(k, :write).reduce(rela) do |r, (sub, props)|
@@ -405,7 +420,7 @@ module Tiun::Base
             attrs = props ? {only: props} : {}
 
             begin
-               r.send("with_#{sub}", context.merge(attrs))
+               r.send("with_#{sub}", context.merge(attrs).merge(args))
             rescue ArgumentError
                r.send("with_#{sub}")
             end

@@ -3,6 +3,9 @@ require 'tiun/core_helper'
 
 <% base = object_in ? nil : " < #{base_controller}" %>
 
+#Kernel.puts("path: <%= context.path %>")
+#Kernel.puts("controller: <%= object_name %><%= base %>")
+
 class ::<%= object_name %><%= base %>
    include ::Tiun::CoreHelper
    include ::<%= template_controller_for(context) %>
@@ -10,6 +13,7 @@ class ::<%= object_name %><%= base %>
    <% if action_names = action_names_for(context) %>
       @context = (@context || {}).merge(YAML.load("<%= action_names.to_yaml.gsub('"', '\"') %>", permitted_classes: [OpenStruct, Symbol]))
    <% end %>
+
 
    <% if arg = controller_default_arg_for(context) %>
       @default_arg ||= {}

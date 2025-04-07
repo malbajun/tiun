@@ -109,8 +109,8 @@ module Tiun
       # => "api/v1/session" inferred from path
       def controller_name_base_for context
          context.controller ||
-            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/create|(?<ccc>[^:]+))).json} =~ context.path
-               c || cc || ccc
+            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/create|(?<ccc>[^:]+)(?:(?<cccc>.*))?)).json} =~ context.path
+              (c || cc || ccc).chomp('/')
             elsif type = find_type(kind_for(context))
                type.controller || type.model || type.name
             end ||
@@ -203,6 +203,12 @@ module Tiun
            end
       end
 
+      def withes type
+         withes = type.with.is_a?(Array) ? type.with : type.with.to_s.split(/\s*,\s*/)
+
+         withes.map {|x| x.is_a?(OpenStruct) ? x.to_h.values : x }.flatten
+      end
+
       # +type_attributes_for+ renders attributes array for the type name or type itself specified,
       # if no type name has been found, it returns a blank array.
       #
@@ -211,7 +217,7 @@ module Tiun
 
          return [] unless type
 
-         (type.with.is_a?(Array) ? type.with : type.with.to_s.split(/\s*,\s*/)).reduce(type.fields || []) do |res, x|
+         withes(type).reduce(type.fields || []) do |res, x|
             if i = res.index {|y| y.name == x }
                res[0...i] | [res[i].merge({rela: true}) ] | res[i + 1..-1]
             else
