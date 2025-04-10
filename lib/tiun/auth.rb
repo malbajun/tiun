@@ -87,7 +87,7 @@ module Tiun::Auth
    end
 
    def authorize!
-      pol = policy&.new(current_user, object)
+      pol = policy.new(current_user, object)
 
       if pol.respond_to?(action_name + "?") && !pol.send(action_name + "?") ||
           pol.respond_to?(:match?) && self.respond_to?(:allowing_permission) && !pol.match?(allowing_permission)

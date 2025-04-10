@@ -159,7 +159,6 @@ module Tiun::Base
    end
 
    def unauthorized _e
-     binding.pry
       render_code 403
    end
 
@@ -354,6 +353,10 @@ module Tiun::Base
 
    def fetch_object
       @object = with_others(object_scope).first || raise(ActiveRecord::RecordNotFound)
+   end
+
+   def object
+      @object ||= fetch_object
    end
 
    def fetch_objects
