@@ -57,7 +57,11 @@ module Tiun::Model
 
    # Specify range to return
    def range range
-      offset(range.begin).limit(range.end - range.begin + 1)
+      if range.is_a?(Range)
+         offset(range.begin).limit(range.end - range.begin + 1)
+      else
+         unscope(:limit).unscope(:offset)
+      end
    end
 
    protected

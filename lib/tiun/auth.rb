@@ -80,14 +80,18 @@ module Tiun::Auth
       object.as_json(context.merge(only: get_properties(object)))
    end
 
+   def subject
+      action_name == 'index' ? objects : object
+   end
+
    def policy
       @_policy ||= "#{model_name}Policy".constantize
    rescue NameError
-      nil
+      Tiun::Policy::Default
    end
 
    def authorize!
-      pol = policy.new(current_user, object)
+      pol = policy.new(current_user, subject)
 
       if pol.respond_to?(action_name + "?") && !pol.send(action_name + "?") ||
           pol.respond_to?(:match?) && self.respond_to?(:allowing_permission) && !pol.match?(allowing_permission)
