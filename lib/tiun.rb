@@ -192,9 +192,10 @@ module Tiun
       #
       def sublings_for type_name_in, kind_in = %i(read write)
         kind = [kind_in].flatten
+        withes_in = withes(type_of(type_name_in)).map {|x| [x, x]}.to_h
 
         sublings["#{type_name_in}:#{kind.join(',')}"] ||=
-           type_attributes_for(type_name_in, kind).reduce({}) do |res, value_in|
+           type_attributes_for(type_name_in, kind).reduce(withes_in) do |res, value_in|
               if value_in.is_a?(Hash)
                  res.merge(value_in)
               else
@@ -209,19 +210,27 @@ module Tiun
          withes.map {|x| x.is_a?(OpenStruct) ? x.to_h.values : x }.flatten
       end
 
+      def type_of type_name_in
+         return type_name_in.is_a?(OpenStruct) ? type_name_in : find_type(type_name_in)
+      end
+
       # +type_attributes_for+ renders attributes array for the type name or type itself specified,
       # if no type name has been found, it returns a blank array.
       #
       def type_attributes_for type_name_in, kind = %i(read write)
-         type = type_name_in.is_a?(OpenStruct) ? type_name_in : find_type(type_name_in)
+         type = type_of(type_name_in)
 
          return [] unless type
+
+         names = type.fields.map {|x| x.name }
 
          withes(type).reduce(type.fields || []) do |res, x|
             if i = res.index {|y| y.name == x }
                res[0...i] | [res[i].merge({rela: true}) ] | res[i + 1..-1]
-            else
+            elsif names.include?(x)
                res | [{name: x, rela: true}.to_os]
+            else
+               res
             end
          end.map do |x|
             next nil unless x.to_h.keys.select do |y|
@@ -235,7 +244,7 @@ module Tiun
             elsif x.source
                { x.name => x.source.to_s }
             elsif x.rela
-               { x.name => nil }
+               { x.name => x.name }
             else
                x.name
             end
