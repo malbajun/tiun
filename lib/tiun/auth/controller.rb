@@ -190,12 +190,15 @@ module Tiun::Auth::Controller
    end
 
    def session_data
-      #@current_user&.jsonize(only: %w(id last_login_at last_active_at accounts refresh_token session_token))
-#            session_data = serialize_collection(user.update_session(session["user"]["refresh_token"]), auth_context)
-#            session.update("user" => session["user"].merge(session_data))
-
       @session_data ||= current_user_data.merge(serialize_collection(@session))
    end
-end
 
-#::Auth::Controller = Tiun::Auth::Controller
+   def serialize_collection collection, context = self.context
+      collection.as_json(context.merge(only: get_properties(collection)))
+   end
+
+   # required for #authorize! to validate via default policy
+   def subject
+      current_user
+   end
+end

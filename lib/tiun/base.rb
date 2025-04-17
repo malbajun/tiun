@@ -286,18 +286,10 @@ module Tiun::Base
 
    def serialize_collection collection, context_in = {}
       collection.jsonize(context.merge(context_in).merge(only: get_properties))
-#         format.json { render :index, json: objects, locales: locales,
-#                                      serializer: objects_serializer,
-#                                      each_serializer: serializer,
-#                                      total: objects.total_count,
-#                                      page: page,
-#                                      per: per }
    end
 
    def serialize object
       object.jsonize(context.merge(only: get_properties))
-#         format.json { render :show, json: @object, locales: @locales,
-#                                     serializer: serializer }
    end
 
    def per

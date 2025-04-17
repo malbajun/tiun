@@ -72,10 +72,6 @@ module Tiun::Auth
       %i(created_at updated_at tsv)
    end
 
-#   def serialize_collection collection, context = self.context
-#      collection.as_json(context.merge(only: get_properties(collection)))
-#   end
-
    def serialize object, context = self.context
       object.as_json(context.merge(only: get_properties(object)))
    end
