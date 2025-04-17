@@ -187,7 +187,7 @@ module Tiun::Base
    end
 
    def render_code code, e = nil
-      args = params.permit(*permitted_filter).to_h
+      args = params.permit(*permitted_filter).to_h rescue {}
       res = { status: code, json: {} }
 
       res[:json][:args] = args if args.present?
@@ -404,7 +404,11 @@ module Tiun::Base
          arg = param_names.first || arg_in
          names.reduce(rel) do |rel, attr_name|
             if model.respond_to?("by_#{attr_name}")
-               rel.send("by_#{attr_name}", params[arg])
+               begin
+                  rel.send("by_#{attr_name}", params[arg], context)
+               rescue ArgumentError
+                  rel.send("by_#{attr_name}", params[arg])
+               end
             elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/
                rel.send(attr_name)
             elsif model.attribute_names.include?(attr_name)

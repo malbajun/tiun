@@ -205,6 +205,8 @@ module Tiun
       end
 
       def withes type
+         return {} unless type
+
          withes = type.with.is_a?(Array) ? type.with : type.with.to_s.split(/\s*,\s*/)
 
          withes.map {|x| x.is_a?(OpenStruct) ? x.to_h.values : x }.flatten
