@@ -34,9 +34,17 @@ module Tiun::Auth
       User
    end
 
+   def tiun_context
+      self.class.instance_variable_get(:@context) || {}
+   end
+
+   def action_context
+      tiun_context[action_name].find{ |x| x["context_name"] == params["context_name"] } || {}.to_os
+   end
+
    def get_properties for_object = nil
       @get_properties ||=
-         if k = self.class.instance_variable_get(:@context)&.[](action_name)&.kind
+         if k = action_context.kind
             Tiun.type_attributes_for(k)
          else
             case for_object

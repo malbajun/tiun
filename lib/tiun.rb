@@ -10,6 +10,7 @@ require "tiun/mixins"
 require "tiun/version"
 require "tiun/migration"
 require "tiun/attributes"
+require "tiun/error_handling"
 require "tiun/base"
 require "tiun/auth"
 require "tiun/core_helper"
@@ -281,7 +282,7 @@ module Tiun
                error :no_action_detected_for_resource_method, { name: context.name, method: method_name }
             end
 
-            action ? [action, method] : nil
+            action ? [action, method.merge(context_name: context.name)] : nil
          end.compact.to_h
 
          if actions.blank?
@@ -336,30 +337,44 @@ module Tiun
          end
       end
 
+      def flex_merge src, tgt
+         src.reduce(tgt.dup) do |res, (key, value)|
+            res[key] =
+               if res[key]
+                  (res[key].is_a?(Array) ? res[key] : [res[key]]) | [value]
+               else
+                  res[key] = value
+               end
+
+            res
+         end
+      end
+
       def load_routes_from config
          @routes =
-         config_reduce(config, routes) do |r, name, context|
-            controller = route_controller_title_for(context)
-            as_prefix = route_as_prefix_for(context)
-            actions = action_names_for(context)
+            config_reduce(config, routes) do |r, name, context|
+               controller = route_controller_title_for(context)
+               as_prefix = route_as_prefix_for(context)
+               actions = action_names_for(context)
 
-            actions.reduce(r) do |res, (action, method)|
-               /(\.(?<format>[^.]+))$/ =~ context.path
+               actions.reduce(r) do |res, (action, method)|
+                  /(\.(?<format>[^.]+))$/ =~ context.path
 
-               path =
-                  /(?<pre>.*)<(?<key>\w+)>(?<post>.*)/ =~ context.path &&
-                  "#{pre}:#{key}#{post}" || context.path
+                  path =
+                     /(?<pre>.*)<(?<key>\w+)>(?<post>.*)/ =~ context.path &&
+                     "#{pre}:#{key}#{post}" || context.path
 
-               if res.select {|x| x[:uri] == path && x[:kind] == action }.blank?
-                  attrs = { uri: path, path: "#{controller}##{action}", kind: method.name, as: as_prefix }
-                  attrs = attrs.merge(options: {defaults: { format: format }, constraints: { format: format }}) if format
+                  if res.select {|x| x[:uri] == path && x[:kind] == action }.blank?
+                     attrs = { uri: path, path: "#{controller}##{action}", kind: method.name, as: as_prefix }
+                     attrs = attrs.merge(options: {defaults: { context_name: name }})
+                     attrs = attrs.deep_merge(options: {defaults: { format: format }, constraints: { format: format }}) if format
 
-                  res | [attrs]
-               else
-                  res
+                     res | [attrs]
+                  else
+                     res
+                  end
                end
             end
-         end
       end
 
       def default_route

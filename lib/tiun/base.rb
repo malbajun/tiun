@@ -7,9 +7,11 @@ module Tiun::Base
    extend ActiveSupport::Concern
 
    included do
+      #include ActionController::RequestForgeryProtection
       include Tiun::Auth
+      include Tiun::ErrorHandling
 
-      attr_reader :object
+      #attr_reader :object
 
       #attr_accessor :params
       #define_callbacks :subscribe
@@ -36,21 +38,7 @@ module Tiun::Base
       after_action :return_range, only: %i(index ac)
       # before_action :authorize!
 
-      rescue_from Exception, with: :server_error
-      rescue_from ActionView::MissingTemplate, with: :missing_template
-      rescue_from ActionController::ParameterMissing, with: :unprocessable_entity
-      rescue_from ActiveRecord::RecordNotUnique,
-                  ActiveRecord::RecordInvalid,
-                  ActiveRecord::RecordNotSaved,
-                  CarrierWave::IntegrityError, with: :unprocessable_entity
       rescue_from ActiveRecord::RecordNotFound, InvalidParamNameError, with: :not_found
-      rescue_from OutOfRangeError, with: :out_of_range
-      rescue_from Tiun::Model::Auth::InvalidTokenError, with: :unauthenticated
-      rescue_from Tiun::Policy::NotAuthorizedError, with: :unauthorized
-
-#      has_scope :with_token, only: %i(index all)
-#      has_scope :with_tokens, only: %i(index), type: :array
-
    end
 
    # GET /<objects>/
@@ -69,7 +57,7 @@ module Tiun::Base
 
       respond_to do |format|
          format.html
-         format.json { render json: serialize(reloaded_object) }
+         format.json { reloaded_object ? render(json: serialize(reloaded_object)) : head(:ok) }
          format.jsonp { head :ok }
          format.any { render json: serialize(reloaded_object), content_type: 'application/json' }
       end
@@ -135,7 +123,7 @@ module Tiun::Base
    end
 
    def model_name
-      @_model_name ||= Tiun.find_type(tiun_context[action_name]&.kind)&.model || super
+      @_model_name ||= Tiun.find_type(action_context.kind)&.model || super
    end
 
    def param_name
@@ -154,58 +142,6 @@ module Tiun::Base
 #      list_serializer.new(model: model)
 #   end
 #
-   def unauthenticated _e
-      render_code :unauthorized
-   end
-
-   def unauthorized _e
-      render_code :forbidden
-   end
-
-   def not_found _e
-      render_code :not_found
-   end
-
-   def out_of_range _e
-      render_code :range_not_satisfiable
-   end
-
-   def unprocessable_entity _e
-      render_code :unprocessable_entity
-   end
-
-   def parameter_missing e
-      render_code :internal_server_error, e
-   end
-
-   def missing_template e
-      render_code :internal_server_error, e
-   end
-
-   def server_error e
-      render_code :internal_server_error, e
-   end
-
-   def render_code code, e = nil
-      args = params.permit(*permitted_filter).to_h rescue {}
-      res = { status: code, json: {} }
-
-      res[:json][:args] = args if args.present?
-
-      if errors = @object && @object.errors.any? && @object.errors.to_a
-         res[:json][:errors] = errors
-      end
-
-      if e
-         /`(?<method>(?:with_(?<rela>\w+)|[^']*))'/ =~ caller.grep(%r{tiun/base})[1]
-         trace = "[#{e.class}]{#{method}}> #{e.message} \n\t #{e.backtrace.join("\n\t")}"
-
-         res[:json][:trace] = trace
-      end
-
-      args.present? || errors.present? ? render(**res) : head(code)
-   end
-
    def ac_limit
       500
    end
@@ -218,8 +154,13 @@ module Tiun::Base
       self.class.instance_variable_get(:@context) || {}
    end
 
+   def action_context
+      [tiun_context[action_name]].flatten.find{ |x| x["context_name"] == params["context_name"] } || {}.to_os
+   end
+
    def tiun_args
-      tiun_context[action_name]&.args || []
+      #[default_arg || model.primary_key])
+      action_context.args || []
    end
 
    def _permitted_filter
@@ -228,10 +169,10 @@ module Tiun::Base
 
    def permitted_filter
       _permitted_filter[action_name] ||=
-         if c = tiun_context[action_name]
-            (c.args || []).reject { |x| x.hidden }.map {|x| x.name }
-         else
+         if action_context.blank?
             [model.primary_key]
+         else
+            (action_context.args || []).reject { |x| x.hidden }.map {|x| x.name }
          end
    end
 
@@ -241,10 +182,10 @@ module Tiun::Base
 
    def permitted_self
       _permitted_self[action_name] ||=
-         if c = tiun_context[action_name]
-            (c.args || []).reject { |x| x.hidden }.map {|x| x.kind == 'json' ? {x.name => {}} : x.name }
-         else
+         if action_context.blank?
             model.attribute_types.keys
+         else
+            (action_context.args || []).reject { |x| x.hidden }.map {|x| x.kind == 'json' ? {x.name => {}} : x.name }
          end
    end
 
@@ -277,7 +218,7 @@ module Tiun::Base
 
    def get_properties
       @get_properties ||=
-         if k = tiun_context[action_name]&.kind
+         if k = action_context.kind
             Tiun.type_attributes_for(k, %i(read write))
          else
             model.attribute_types.keys
@@ -316,7 +257,7 @@ module Tiun::Base
    end
 
    def allowing_permission
-      if perm = tiun_context[action_name].policy
+      if perm = action_context.policy
          [perm].flatten.map { |x| x.split(",") }.flatten
       end
    end
@@ -337,8 +278,12 @@ module Tiun::Base
       raise OutOfRangeError if total > 0 && @range.begin >= total || @range.end < @range.begin
    end
 
+   def reload_scope
+      with_others(object_scope.base_class.where(object.primary_key => object[object.primary_key]))
+   end
+
    def reloaded_object
-      with_others(object_scope.base_class.where(object.primary_key => object[object.primary_key])).first
+      reload_scope.first
    end
 
    def new_object
@@ -346,11 +291,11 @@ module Tiun::Base
    end
 
    def fetch_object
-      @object = with_others(object_scope).first || raise(ActiveRecord::RecordNotFound)
+      object
    end
 
    def object
-      @object ||= fetch_object
+      @object ||= with_others(object_scope).first || raise(ActiveRecord::RecordNotFound)
    end
 
    def fetch_objects
@@ -362,7 +307,7 @@ module Tiun::Base
    end
 
    def object_scope
-      apply_scope(model, [default_arg || model.primary_key])
+      apply_scope(model.all, [default_arg || model.primary_key])
    end
 
    def scope_args
@@ -376,17 +321,17 @@ module Tiun::Base
    end
 
    def objects_scope
-      apply_scope(model, tiun_args.map { |a| a.name })
+      apply_scope(model.all, tiun_args.map { |a| a.name })
    end
 
    def is_arg_requires_skip? arg_in
       skip = tiun_args.find {|x| x.name == arg_in }&.skip
 
-      return true if skip.to_s =~ /scope/
+      return true if skip.to_s =~ /args/
    end
 
-   def apply_scope model = self.model, args = []
-      args.reduce(model) do |rel, arg_in|
+   def apply_scope rela = self.model.all, args = []
+      args.reduce(rela) do |rel, arg_in|
          arg_prop = tiun_args.find { |x| arg_in == x.name }
          names = [arg_prop&.source || arg_in, arg_prop&.alias&.split(',')].flatten.compact
          param_names = params.keys & names
@@ -404,6 +349,7 @@ module Tiun::Base
             elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/
                rel.send(attr_name)
             elsif model.attribute_names.include?(attr_name)
+               # TODO protect params[arg] is non string or integer
                rel.where({ attr_name => params[arg] })
             else
                # Kernel.puts "WARN: Invalid scope by property '#{attr_name}'"
@@ -414,9 +360,9 @@ module Tiun::Base
    end
 
    def with_others rela, args = self.scope_args
-      k = tiun_context[action_name]&.kind
+      k = action_context.kind
 
-      Tiun.sublings_for(k, :write).reduce(rela) do |r, (sub, props)|
+      Tiun.sublings_for(k, :write).reduce(rela.all) do |r, (sub, props)|
          if r.respond_to?("with_#{sub}")
             attrs = props ? {only: props} : {}
 

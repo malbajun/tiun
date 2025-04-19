@@ -11,20 +11,20 @@ module Tiun::Auth::Controller
    included do
       include ActionController::RequestForgeryProtection
       include Tiun::Auth
+      include Tiun::ErrorHandling
 
       protect_from_forgery only: :create, with: :exception, prepend: true
 
       before_action :set_languages
-      before_action :fetch_token, only: %i(update show destroy)
+      before_action :fetch_token, only: %i(update show destroy), prepend: true
       after_action :obsolete_token, only: %i(update show destroy)
       after_action :session_update, only: %i(create update show destroy)
       after_action :drop_auth, only: %i(destroy)
 
-      rescue_from Exception, with: :server_error
       rescue_from UnauthorizedError, with: :unauthorized
-      rescue_from ActiveRecord::RecordNotFound, with: :unauthenticated
-      rescue_from Tiun::Model::Account::InvalidPasswordError, with: :unauthenticated
-      rescue_from ActionController::InvalidAuthenticityToken, with: :unauthenticated
+      rescue_from ActiveRecord::RecordNotFound,
+                  Tiun::Model::Account::InvalidPasswordError,
+                  ActionController::InvalidAuthenticityToken, with: :unauthenticated
       rescue_from NoTokenError, InvalidTokenError, with: :not_found
    end
 
@@ -40,7 +40,7 @@ module Tiun::Auth::Controller
 
    # PUT /session.json
    def update
-      @session = @current_user.update_session(@token)
+      @session = current_user.update_session(@token)
 
       respond_to do |format|
          format.html { redirect_to :root, notice: I18n.t("tiun.session.updated") }
@@ -64,7 +64,7 @@ module Tiun::Auth::Controller
 
       respond_to do |format|
          format.html { redirect_to :root, notice: I18n.t("tiun.session.deleted") }
-         format.json { render json: serialize_collection([]) }
+         format.json { render json: [] }
       end
    end
 
@@ -151,13 +151,15 @@ module Tiun::Auth::Controller
       arg_name = default_arg
 
       @account ||=
-         if !arg_name
+         if @token.respond_to?(:tokenable) && @token.tokenable.is_a?(account_model)
+            @token.tokenable
+         elsif !arg_name
             account_model.find(params[account_model.primary_key])
          elsif account_model.respond_to?("by_credentials_or_id")
             account_model.by_credentials_or_id(parms[arg_name]).first
          else
             account_model.where({ arg_name => parms[arg_name] }).first
-         end# || raise(ActiveRecord::RecordNotFound)
+         end
    end
 
    def _permitted_filter
@@ -166,10 +168,10 @@ module Tiun::Auth::Controller
 
    def permitted_filter
       _permitted_filter[action_name] ||=
-         if c = self.class.instance_variable_get(:@context)[action_name]
-            (c.args || []).reject { |x| x.hidden }.map {|x| x.name }
-         else
+         if action_context.blank?
             [model.primary_key]
+         else
+            (action_context.args || []).reject { |x| x.hidden }.map {|x| x.name }
          end
    end
 
@@ -186,7 +188,17 @@ module Tiun::Auth::Controller
    end
 
    def current_user
-      @current_user ||= super || account&.authenticated_user!(parms[:password])
+      @current_user ||= super ||
+         if @token.respond_to?(:tokenable) && @token.tokenable == account && account.respond_to?(:user)
+            # auth by validate token
+            account.user
+         elsif @token.respond_to?(:tokenable) && @token.tokenable.is_a?(user_model)
+            # auth by refresh token
+            @token.tokenable
+         elsif account
+            # auth by password
+            account.authenticated_user!(parms[:password])
+         end
    end
 
    def session_data

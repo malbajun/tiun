@@ -34,6 +34,10 @@ class Array
 end
 
 class OpenStruct
+   def blank?
+      self.to_h.keys.empty?
+   end
+
    def merge other
       ::OpenStruct.new(self.to_os.deep_merge(other))
    end

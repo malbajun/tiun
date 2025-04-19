@@ -11,9 +11,8 @@ class ::<%= object_name %><%= base %>
    include ::<%= template_controller_for(context) %>
 
    <% if action_names = action_names_for(context) %>
-      @context = (@context || {}).merge(YAML.load("<%= action_names.to_yaml.gsub('"', '\"') %>", permitted_classes: [OpenStruct, Symbol]))
+      @context = Tiun.flex_merge(@context || {}, YAML.load("<%= action_names.to_yaml.gsub('"', '\"') %>", permitted_classes: [OpenStruct, Symbol]))
    <% end %>
-
 
    <% if arg = controller_default_arg_for(context) %>
       @default_arg ||= {}
