@@ -155,7 +155,7 @@ module Tiun::Base
    end
 
    def action_context
-      [tiun_context[action_name]].flatten.find{ |x| x["context_name"] == params["context_name"] } || {}.to_os
+      [tiun_context[action_name]].flatten.find{ |x| x && x["context_name"] == params["context_name"] } || {}.to_os
    end
 
    def tiun_args
