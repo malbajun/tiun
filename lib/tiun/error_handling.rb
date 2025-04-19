@@ -66,3 +66,5 @@ module Tiun::ErrorHandling
       args.present? || errors.present? ? render(**res) : head(code)
    end
 end
+
+ErrorHandling = Tiun::ErrorHandling
