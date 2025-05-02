@@ -25,7 +25,7 @@ module Tiun::Base
 #         I18n.with_locale(I18n.locale.to_s, &block)
 #      include Pundit
 
-      before_action :set_languages, if: ->{ respond_to?(:set_languages) }
+      before_action :set_languages, if: ->{ respond_to?(:set_languages) }, prepend: true
  #     before_action :authenticate_user
 #      before_action :set_tokens, only: %i(index)
 #      before_action :set_page, only: %i(index)
