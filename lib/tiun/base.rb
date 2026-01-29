@@ -11,9 +11,10 @@ module Tiun::Base
       include Tiun::ErrorHandling
 
       before_action :set_languages, if: ->{ respond_to?(:set_languages) }, prepend: true
+      before_action :fetch_objects, only: %i(index)
       before_action :new_object, only: %i(create)
       before_action :fetch_object, only: %i(show update destroy)
-      before_action :fetch_objects, only: %i(index)
+      before_action :assign_attributes, only: %i(update)
       before_action :parse_range, only: %i(index)
       after_action :return_range, only: %i(index)
 
@@ -44,7 +45,7 @@ module Tiun::Base
 
    # PUT /<objects>/:id.json
    def update
-      object.update!(permitted_params)
+      object.save!
 
       respond_to do |format|
          format.html
@@ -229,6 +230,10 @@ module Tiun::Base
 
    def new_object
       @object = model.new(permitted_params)
+   end
+
+   def assign_attributes
+      object.assign_attributes(permitted_params)
    end
 
    def fetch_object
