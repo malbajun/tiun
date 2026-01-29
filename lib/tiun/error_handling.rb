@@ -60,6 +60,8 @@ module Tiun::ErrorHandling
          /`(?<method>(?:with_(?<rela>\w+)|[^']*))'/ =~ caller.grep(%r{tiun/base})[1]
          trace = "[#{e.class}]{#{method}}> #{e.message} \n\t #{e.backtrace.join("\n\t")}"
 
+         logger.error(trace) if defined?(logger)
+
          res[:json][:trace] = trace
       end
 
