@@ -25,8 +25,9 @@ module Tiun
 
    MAP = {
       'get' => {
-         %r{(?:/(?<c>[^:/]+)).json} => 'index',
          %r{(?:/(?<c>[^/]+)/:[^/]+).json} => 'show',
+         %r{(?:/(?<c>[^/]+)/@(?<cc>[^/]+)).json} => ':cc',
+         %r{(?:/(?<c>[^:/]+)).json} => 'index',
       },
       'post' => 'create',
       'patch' => 'update',
@@ -110,8 +111,8 @@ module Tiun
       # => "api/v1/session" inferred from path
       def controller_name_base_for context
          context.controller ||
-            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/create|(?<ccc>[^:]+)(?:(?<cccc>.*))?)).json} =~ context.path
-              (c || cc || ccc).chomp('/')
+            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/(?<ccc>create|ac)|(?<cccc>[^:]+)(?:(?<ccccc>.*))?)).json} =~ context.path
+               (c || cc || cccc).chomp('/')
             elsif type = find_type(kind_for(context))
                type.controller || type.model || type.name
             end ||
@@ -122,13 +123,13 @@ module Tiun
       # => "api/v1/session" => api_v1_session inferred from path
       def as_prefix_base_for context
          context.as ||
-            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/create|(?<ccc>[^:]+))).json} =~ context.path
+            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/(?<ccc>create|ac)|(?<cccc>[^:]+))).json} =~ context.path
                if c
                   c.singularize
                elsif cc
-                  "create_#{cc.singularize}"
+                  "#{ccc}_#{cc.singularize}"
                else
-                  ccc.pluralize
+                  cccc.pluralize
                end
             elsif type = find_type(kind_for(context))
                type.controller || type.model || type.name
@@ -274,7 +275,10 @@ module Tiun
 
             action =
                method.action || (rule.is_a?(String) && rule || rule.reduce(nil) do |a, (re, action)|
-                  a || context.path =~ re && action || nil
+                  a ||
+                     if m = re.match(context.path)
+                        /^:(?<var>.*)/ =~ action ? m[var] : action
+                     end
                end)
 
             # TODO validated types

@@ -33,9 +33,8 @@ module Tiun::Base
       before_action :new_object, only: %i(create)
       before_action :fetch_object, only: %i(show update destroy)
       before_action :fetch_objects, only: %i(index)
-      before_action :fetch_ac_objects, only: %i(ac)
-      before_action :parse_range, only: %i(index ac)
-      after_action :return_range, only: %i(index ac)
+      before_action :parse_range, only: %i(index)
+      after_action :return_range, only: %i(index)
       # before_action :authorize!
 
       rescue_from ActiveRecord::RecordNotFound, InvalidParamNameError, with: :not_found
@@ -98,24 +97,6 @@ module Tiun::Base
       end
    end
 
-   # GET /<objects>/ac.json
-   def ac
-      respond_to do |format|
-         format.json {
-            render json: {
-               list: objects.limit(ac_limit).jsonize(ac_context),
-               total: objects.total_count
-            }
-         }
-      end
-   end
-
-#   def dashboard
-#      settings = { settings: Tiun.settings, locales: @locales }
-#
-#      render inline: react_component('Dashboard', settings), layout: 'tiun'
-#   end
-#
    protected
 
    def code
@@ -142,14 +123,6 @@ module Tiun::Base
 #      list_serializer.new(model: model)
 #   end
 #
-   def ac_limit
-      500
-   end
-
-   def ac_context
-      @_ac_context ||= { only: %i(key value) }
-   end
-
    def tiun_context
       self.class.instance_variable_get(:@context) || {}
    end
@@ -300,10 +273,6 @@ module Tiun::Base
 
    def fetch_objects
       objects
-   end
-
-   def fetch_ac_objects
-      @objects = apply_scopes(model)
    end
 
    def object_scope

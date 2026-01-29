@@ -85,7 +85,7 @@ module Tiun::Auth
    end
 
    def subject
-      action_name == 'index' ? objects : object
+      action_name == 'index' ? objects : action_name == 'create' ? new_object : object
    end
 
    def policy
