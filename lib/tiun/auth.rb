@@ -7,7 +7,6 @@ module Tiun::Auth
       before_action :authorize!, if: -> { current_user }
    end
 
-   # TODO add automatic with list
    def current_user
       @current_user ||= session["user"] && user
    end

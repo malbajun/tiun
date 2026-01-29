@@ -19,7 +19,6 @@ module Tiun
    class NoRailsError < StandardError ;end
    class InvalidControllerError < StandardError ;end
    class InvalidModelError < StandardError ;end
-#   extend ActiveSupport::Concern
    extend Tiun::Migration
    extend Tiun::Attributes
 
@@ -48,8 +47,6 @@ module Tiun
       model: ERB.new(IO.read(File.join(File.dirname(__FILE__), "tiun", "automodel.rb.erb"))),
       policy: ERB.new(IO.read(File.join(File.dirname(__FILE__), "tiun", "autopolicy.rb.erb"))),
       controller: ERB.new(IO.read(File.join(File.dirname(__FILE__), "tiun", "autocontroller.rb.erb"))),
-#      list_serializer: ERB.new(IO.read(File.join(File.dirname(__FILE__), "tiun", "autolistserializer.rb.erb"))),
-#      serializer: ERB.new(IO.read(File.join(File.dirname(__FILE__), "tiun", "autoserializer.rb.erb")))
    }
 
    class << self
@@ -172,14 +169,6 @@ module Tiun
          context.policy || model_name_for(context).singularize.camelize + "Policy"
       end
 
-#      def serializer_title_for context
-#         context.serializer || model_name_for(context).singularize.camelize + "Serializer"
-#      end
-#
-#      def list_serializer_title_for context
-#         context.list_serializer || model_name_for(context).singularize.camelize + "ListSerializer"
-#      end
-#
       # find type record in type record table for last version of
       #
       def find_type type_names_in
@@ -258,10 +247,6 @@ module Tiun
       def detect_type type_in
          type = TYPE_MAP[type_in]
          type || !type.nil? && "reference" || nil
-         #type_in.split(/\s+/).reject {|x|x =~ /^</}.map do |type_tmp|
-         #   type = TYPE_MAP[type_tmp] #.keys.find {|key| key == type_tmp}
-         #   type || !type.nil? && "reference" || nil
-         #end.compact.uniq.join("_")
       end
 
       def load_types_from config
@@ -426,14 +411,6 @@ module Tiun
          @policies ||= []
       end
 
-#      def serializers
-#         @serializers ||= []
-#      end
-#
-#      def list_serializers
-#         @list_serializers ||= []
-#      end
-#
       def controllers
          @controllers ||= []
       end
@@ -471,10 +448,6 @@ module Tiun
          ActiveRecord::Base.tiuns
       end
 
-#      def model_names
-#         settings.keys.map(&:to_s)
-#      end
-#
       def constantize name
          name.constantize
       rescue NameError
@@ -515,96 +488,11 @@ module Tiun
          errors.blank?
       end
 
-      #def target_version
-      #
-      #end
-
-#      def type_of kind
-#         case kind
-#         when 'string'
-#            :"ActiveModel::Type::String"
-#         when 'integer', 'index'
-#            :"ActiveRecord::ConnectionAdapters::SQLite3Adapter::SQLite3Integer"
-#         else
-#            error :invalid_attribute_type_for_kind, { kind: kind }
-#         end
-#      end
-#      def plain_parm parm
-#         case parm
-#         when String
-#            array = parm.split( /\s*,\s*/ )
-#
-#            if array.size > 1
-#               plain_array( array )
-#            else
-#               array.first.to_sym
-#            end
-#         when Hash
-#            plain_hash( parm )
-#         when Array
-#            plain_array( parm )
-#         else
-#            nil
-#         end
-#      end
-#
-#      def plain_hash hash
-#         hash.map do |( key, parms )|
-#            [ key.to_sym, plain_parm( parms )]
-#         end.to_h
-#      end
-#
-#      def plain_array array
-#         array.map do | parm |
-#            plain_parm( parm )
-#         end.flatten
-#      end
-#
-#      def setup_classes settings
-#         settings.each do | (model_name, tiun) |
-#            name = -> { model_name.to_s.camelize }
-#            names = -> { model_name.to_s.pluralize.camelize }
-#            params = -> { tiun[:fields].map(&:first) }
-#
-#            binding.pry
-#            controller_rb = <<-RB
-#               class #{names[]}Controller < #{base_controller}
-#                  include Tiun::Base
-#
-#                  def model
-#                     ::#{name[]} ;end
-#
-#                  def object_serializer
-#                     #{name[]}Serializer ;end
-#
-#                  def objects_serializer
-#                     #{names[]}Serializer
-#                  rescue NameError
-#                     Tiun::PagedCollectionSerializer ;end
-#
-#                  def permitted_params
-#                     params.require( '#{model_name}' ).permit( #{params[]} ) ;end;end
-#            RB
-#
-#            policy_rb = <<-RB
-#               class #{name[]}Policy
-#                  include Tiun::Policy
-#               end
-#            RB
-#
-#            class_eval(controller_rb)
-#            class_eval(policy_rb)
-#         end
-#      end
-#
       def root
          Gem::Specification.find_by_name( "tiun" ).full_gem_path
       end
 
    end
-
-#   included do
-#   end
 end
 
 require "tiun/policy"

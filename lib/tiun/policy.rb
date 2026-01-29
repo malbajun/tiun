@@ -11,10 +11,6 @@ module Tiun::Policy
       true
    end
 
-#   def show?
-#      scope.where(id: record.id).exists?
-#   end
-
    def match? allowing_permissions
       user && (user.permissions & allowing_permissions).any?
    end

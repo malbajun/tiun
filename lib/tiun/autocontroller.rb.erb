@@ -3,9 +3,6 @@ require 'tiun/core_helper'
 
 <% base = object_in ? nil : " < #{base_controller}" %>
 
-#Kernel.puts("path: <%= context.path %>")
-#Kernel.puts("controller: <%= object_name %><%= base %>")
-
 class ::<%= object_name %><%= base %>
    include ::Tiun::CoreHelper
    include ::<%= template_controller_for(context) %>

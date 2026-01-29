@@ -7,35 +7,15 @@ module Tiun::Base
    extend ActiveSupport::Concern
 
    included do
-      #include ActionController::RequestForgeryProtection
       include Tiun::Auth
       include Tiun::ErrorHandling
 
-      #attr_reader :object
-
-      #attr_accessor :params
-      #define_callbacks :subscribe
-      # include Kaminari::ConfigurationMethods
-      #class_attribute :_helpers
-      #self._helpers = Module.new
-      #include ActiveSupport::Configurable
-      #config_accessor :co
-#      helper_method :cookies if defined?(helper_method)
-#      around_perform do |job, block, _|
-#         I18n.with_locale(I18n.locale.to_s, &block)
-#      include Pundit
-
       before_action :set_languages, if: ->{ respond_to?(:set_languages) }, prepend: true
- #     before_action :authenticate_user
-#      before_action :set_tokens, only: %i(index)
-#      before_action :set_page, only: %i(index)
-#      before_action :set_locales
       before_action :new_object, only: %i(create)
       before_action :fetch_object, only: %i(show update destroy)
       before_action :fetch_objects, only: %i(index)
       before_action :parse_range, only: %i(index)
       after_action :return_range, only: %i(index)
-      # before_action :authorize!
 
       rescue_from ActiveRecord::RecordNotFound, InvalidParamNameError, with: :not_found
    end
@@ -111,18 +91,6 @@ module Tiun::Base
       @_param_name ||= model_name.tableize.singularize
    end
 
-#   def serializer
-#      @serializer ||= "#{model_name}Serializer".constantize
-#   end
-#
-#   def list_serializer
-#      @list_serializer ||= "#{model_name}ListSerializer".constantize
-#   end
-#
-#   def objects_serializer
-#      list_serializer.new(model: model)
-#   end
-#
    def tiun_context
       self.class.instance_variable_get(:@context) || {}
    end

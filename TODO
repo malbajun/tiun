@@ -4,3 +4,15 @@ rubocop
 reek
 guard+
 Simplecov
+   #TODO
+   #defaults fields: :user
+   #  tiun as: :branch /as: :is
+   #  include user(without *_at)/all fields (to list/form),
+   #  all scopes (to list),
+   #  all havings - has_many/ones (to form)
+   # tiunable_by :field/s - for text search by this field/s
+
+
+Tiun::Auth.current_user
+   # TODO add automatic with list
+
