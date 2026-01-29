@@ -1,9 +1,0 @@
-require 'tiun/list_serializer'
-
-class ::<%= object_name %>
-   include ::Tiun::ListSerializer
-
-   def initialize *args, model: nil
-      @model = model
-   end
-end
