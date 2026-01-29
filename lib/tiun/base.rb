@@ -372,7 +372,7 @@ module Tiun::Base
                r.send("with_#{sub}")
             end
          else
-            # Kernel.puts "WARN: Invalid scope by property '#{attr_name}'"
+            warn "WARN: Invalid scope by property '#{sub}'"
             r
          end
       end
