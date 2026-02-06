@@ -8,10 +8,10 @@ module Tiun::Auth
    end
 
    def current_user
-      @current_user ||= session["user"] && user
+      @current_user ||= session["user"] && session_user
    end
 
-   def user context = auth_context
+   def session_user context = auth_context
       @user ||= User.with_user_names(context)
                     .with_descriptions(context)
                     .with_accounts(context)
@@ -34,7 +34,7 @@ module Tiun::Auth
    end
 
    def tiun_context
-      self.class.instance_variable_get(:@context) || {}
+      self.class.instance_variable_get(:@context) || { action_name => [] }
    end
 
    def action_context
@@ -67,7 +67,7 @@ module Tiun::Auth
       @auth_context ||= { except: supplement_names, locales: locales }
    end
 
-   def context
+   def current_context
       @context ||= { except: supplement_names, locales: locales }
    end
 
@@ -79,7 +79,7 @@ module Tiun::Auth
       %i(created_at updated_at tsv)
    end
 
-   def serialize object, context = self.context
+   def serialize object, context = self.current_context
       object.as_json(context.merge(only: get_properties(object)))
    end
 

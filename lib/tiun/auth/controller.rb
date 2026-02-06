@@ -5,6 +5,7 @@ module Tiun::Auth::Controller
    class NoTokenError < StandardError; end
    class InvalidTokenError < StandardError; end
    class UnauthorizedError < StandardError; end
+   class UnauthenticatedError < StandardError; end
 
    extend ActiveSupport::Concern
 
@@ -15,8 +16,9 @@ module Tiun::Auth::Controller
 
       protect_from_forgery only: :create, with: :exception, prepend: true
 
-      before_action :set_languages
+      # before_action :set_languages
       before_action :fetch_token, only: %i(update show destroy), prepend: true
+      before_action :require_current_user
       after_action :obsolete_token, only: %i(update show destroy)
       after_action :session_update, only: %i(create update show destroy)
       after_action :drop_auth, only: %i(destroy)
@@ -24,13 +26,14 @@ module Tiun::Auth::Controller
       rescue_from UnauthorizedError, with: :unauthorized
       rescue_from ActiveRecord::RecordNotFound,
                   Tiun::Model::Account::InvalidPasswordError,
-                  ActionController::InvalidAuthenticityToken, with: :unauthenticated
+                  ActionController::InvalidAuthenticityToken,
+                  UnauthenticatedError, with: :unauthenticated
       rescue_from NoTokenError, InvalidTokenError, with: :not_found
    end
 
    # POST /session.json
    def create
-      @session = @current_user.generate_session
+      @session = current_user.generate_session
 
       respond_to do |format|
          format.html { redirect_to :root, notice: I18n.t("tiun.session.created") }
@@ -50,7 +53,7 @@ module Tiun::Auth::Controller
 
    # GET /session.json
    def show
-      @session = @current_user.current_session(@token)
+      @session = current_user.current_session(@token)
 
       respond_to do |format|
          format.html { redirect_to :root }
@@ -60,7 +63,7 @@ module Tiun::Auth::Controller
 
    # DELETE /session.json
    def destroy
-      @session = @current_user.destroy_session(@token)
+      @session = current_user.destroy_session(@token)
 
       respond_to do |format|
          format.html { redirect_to :root, notice: I18n.t("tiun.session.deleted") }
@@ -69,6 +72,10 @@ module Tiun::Auth::Controller
    end
 
    protected
+
+   def require_current_user
+      current_user || raise(UnauthenticatedError)
+   end
 
    def drop_auth
       session.delete("user")
@@ -102,17 +109,12 @@ module Tiun::Auth::Controller
       [:created_at, :updated_at]
    end
 
-   def context
+   def current_context
       @_context ||= {
          except: supplement_names,
          locales: locales,
          languages: @languages,
       }
-   end
-
-   def set_languages
-      # NOTE the default values
-      @languages ||= %i(ру)
    end
 
    def default_arg
@@ -203,8 +205,8 @@ module Tiun::Auth::Controller
       @session_data ||= current_user_data.merge(serialize_collection(@session))
    end
 
-   def serialize_collection collection, context = self.context
-      collection.as_json(context.merge(only: get_properties(collection)))
+   def serialize_collection collection, context = self.current_context
+      collection.as_json(current_context.merge(only: get_properties(collection)))
    end
 
    # required for #authorize! to validate via default policy

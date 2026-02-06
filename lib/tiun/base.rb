@@ -10,11 +10,12 @@ module Tiun::Base
       include Tiun::Auth
       include Tiun::ErrorHandling
 
-      before_action :set_languages, if: ->{ respond_to?(:set_languages) }, prepend: true
+      before_action :set_context, if: ->{ respond_to?(:set_context) }, prepend: true
       before_action :fetch_objects, only: %i(index)
       before_action :new_object, only: %i(create)
       before_action :fetch_object, only: %i(show update destroy)
-      before_action :assign_attributes, only: %i(update)
+      before_action :assign_attributes, only: %i(update create)
+      before_action :generate_answer, only: %i(destroy)
       before_action :parse_range, only: %i(index)
       after_action :return_range, only: %i(index)
 
@@ -67,14 +68,13 @@ module Tiun::Base
 
    # DELETE /<objects>/:id.json
    def destroy
-      answer = serialize(object)
       object.destroy
 
       respond_to do |format|
          format.html
-         format.json { render json: answer }
+         format.json { render json: @answer }
          format.jsonp { head :ok }
-         format.any { render json: answer, content_type: 'application/json' }
+         format.any { render json: @answer, content_type: 'application/json' }
       end
    end
 
@@ -97,7 +97,9 @@ module Tiun::Base
    end
 
    def action_context
-      [tiun_context[action_name]].flatten.find{ |x| x && x["context_name"] == params["context_name"] } || {}.to_os
+      [tiun_context[action_name]].flatten.find do |x|
+         x && x["context_name"] == params["context_name"]
+      end || {}.to_os
    end
 
    def tiun_args
@@ -127,7 +129,11 @@ module Tiun::Base
          if action_context.blank?
             model.attribute_types.keys
          else
-            (action_context.args || []).reject { |x| x.hidden }.map {|x| x.kind == 'json' ? {x.name => {}} : x.name }
+            (action_context.args || []).reject { |x| x.hidden }.map do |x|
+               names = [x.name] | (x.alias ? x.alias.split(/\s*,\s*/) : [])
+
+               x.kind == 'json' ? names.reduce({}) {|r, n| r.merge(n => {}) } : names
+            end.flatten(1)
          end
    end
 
@@ -143,10 +149,6 @@ module Tiun::Base
          end
    end
 
-   def permitted_params
-      params.require(param_name).permit(*permitted_self, **permitted_children)
-   end
-
    def total
       @total ||=
          %i(total_size total_count count).reduce(nil) do |count, method|
@@ -156,6 +158,12 @@ module Tiun::Base
 
    def paged_objects
       objects.range(range)
+   end
+
+   def current_context
+      context_in = respond_to?(:context) ? context : {}
+
+      context_in.merge(context_attributes)
    end
 
    def get_properties
@@ -168,11 +176,11 @@ module Tiun::Base
    end
 
    def serialize_collection collection, context_in = {}
-      collection.jsonize(context.merge(context_in).merge(only: get_properties))
+      collection.jsonize(current_context.merge(context_in).merge(only: get_properties))
    end
 
    def serialize object
-      object.jsonize(context.merge(only: get_properties))
+      object.jsonize(current_context.merge(only: get_properties))
    end
 
    def per
@@ -229,11 +237,40 @@ module Tiun::Base
    end
 
    def new_object
-      @object = model.new(permitted_params)
+      @object = model.new
+   end
+
+   def generate_answer
+      @answer = serialize(object)
+   end
+
+   def current_attrs
+      params.require(param_name).permit(*permitted_self, **permitted_children).to_h
+   end
+
+   def context_attributes attrs = current_attrs
+      action_context.contexted_attributes.map {|_, names| names.reduce(nil) {|r, name| r || attrs[name] }}.to_h
    end
 
    def assign_attributes
-      object.assign_attributes(permitted_params)
+      default_attributes =
+        respond_to?(:default_attributes) ? self.default_attributes.merge(context_attributes).map do |(key, value)|
+            [key.to_s, value]
+         end.to_h : {}
+
+      assign_attributes_for(object, default_attributes.merge(current_attrs))
+   end
+
+   def assign_attributes_for object, attrs
+      attrs.reduce(object) do |o, (key, value)|
+         if o.respond_to?("#{key}=")
+            o.send("#{key}=", value)
+         else # just set variable for the object
+            o.instance_variable_set(:"@#{key}", value)
+         end
+
+         o
+      end
    end
 
    def fetch_object
@@ -263,7 +300,7 @@ module Tiun::Base
    end
 
    def objects_scope
-      apply_scope(model.all, tiun_args.map { |a| a.name })
+      apply_scope(model.default_scoped, tiun_args.map { |a| a.name })
    end
 
    def is_arg_requires_skip? arg_in
@@ -272,7 +309,7 @@ module Tiun::Base
       return true if skip.to_s =~ /args/
    end
 
-   def apply_scope rela = self.model.all, args = []
+   def apply_scope rela = self.model.default_scoped, args = []
       args.reduce(rela) do |rel, arg_in|
          arg_prop = tiun_args.find { |x| arg_in == x.name }
          names = [arg_prop&.source || arg_in, arg_prop&.alias&.split(',')].flatten.compact
@@ -281,35 +318,60 @@ module Tiun::Base
          next rel unless param_names.any? && !is_arg_requires_skip?(arg_in)
 
          arg = param_names.first || arg_in
-         names.reduce(rel) do |rel, attr_name|
-            if model.respond_to?("by_#{attr_name}")
-               begin
-                  rel.send("by_#{attr_name}", params[arg], context)
-               rescue ArgumentError
-                  rel.send("by_#{attr_name}", params[arg])
-               end
-            elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/
-               rel.send(attr_name)
-            elsif model.attribute_names.include?(attr_name)
-               # TODO protect params[arg] is non string or integer
-               rel.where({ attr_name => params[arg] })
-            else
-               # Kernel.puts "WARN: Invalid scope by property '#{attr_name}'"
-               rel
+
+         apply_by_names(names, apply_sec_names(names, rel, arg), arg)
+      end
+   end
+
+   # apply secunda /// http://lingvo.asu.ru/latin/morfo/y45.html
+   def apply_sec_names names, rel, arg
+      names.reduce(rel) do |rel, attr_name|
+         if model.respond_to?("sec_#{attr_name}")
+            begin
+               rel.send("sec_#{attr_name}", params[arg], current_context)
+            rescue ArgumentError
+               rel.send("sec_#{attr_name}", params[arg])
             end
+         else
+            rel
          end
       end
    end
 
+   def apply_by_names names, rel, arg
+      names.reduce(rel) do |rel, attr_name|
+         if model.respond_to?("by_#{attr_name}")
+            begin
+               rel.send("by_#{attr_name}", params[arg], current_context)
+            rescue ArgumentError
+               rel.send("by_#{attr_name}", params[arg])
+            end
+         elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/
+            rel.send(attr_name)
+         elsif model.attribute_names.include?(attr_name)
+            # TODO protect params[arg] is non string or integer
+            rel.where({ attr_name => params[arg] })
+         else
+            # Kernel.puts "WARN: Invalid scope by property '#{attr_name}'"
+            rel
+         end
+      end
+   end
+
+   # +with_others+ collects relation with "with_" methods defiend in the scheme
+   # args:
+   # * rela - relation not a pure model exactly
+   # * args - arguments defaulted to the tiun scope arguments
+   #
    def with_others rela, args = self.scope_args
       k = action_context.kind
 
-      Tiun.sublings_for(k, :write).reduce(rela.all) do |r, (sub, props)|
+      Tiun.sublings_for(k, :write).reduce(rela) do |r, (sub, props)|
          if r.respond_to?("with_#{sub}")
             attrs = props ? {only: props} : {}
 
             begin
-               r.send("with_#{sub}", context.merge(attrs).merge(args))
+               r.send("with_#{sub}", current_context.merge(attrs).merge(args))
             rescue ArgumentError
                r.send("with_#{sub}")
             end
