@@ -8,7 +8,8 @@ class ::<%= object_name %><%= base %>
    include ::<%= template_controller_for(context) %>
 
    <% if action_names = action_names_for(context) %>
-      @context = Tiun.flex_merge(@context || {}, YAML.load("<%= action_names.to_yaml.gsub('"', '\"') %>", permitted_classes: [OpenStruct, Symbol]))
+      body = "<%= action_names.to_yaml.gsub('"', '\"') %>"
+      @context = Tiun.flex_merge(@context || {}, Tiun.fill_in_context(body))
    <% end %>
 
    <% if arg = controller_default_arg_for(context) %>

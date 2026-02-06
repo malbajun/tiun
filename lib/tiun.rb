@@ -195,6 +195,33 @@ module Tiun
            end
       end
 
+      def contexted_attributes_for tiun_args
+         (tiun_args || []).reduce({}) do |attrs, arg|
+            key =
+               case arg.context
+               when true
+                  arg.name
+               when String
+                  arg.context
+               end
+
+            key ? attrs.merge(key => [arg.name] | (arg.alias&.split(/\s*,\s*/)|[])) : attrs
+         end
+      end
+
+      def fill_in_context context_in
+         context = YAML.load(context_in, permitted_classes: [OpenStruct, Symbol])
+
+         context.map do |(action_name, actx)|
+            new =
+               actx.merge({
+                  contexted_attributes: contexted_attributes_for(actx.args)
+               })
+
+            [action_name, new]
+         end.to_h
+      end
+
       def withes type
          return {} unless type
 
