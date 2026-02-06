@@ -29,7 +29,7 @@ end
 
 class Array
    def to_os
-      self.map {|x| x.to_os }
+      self.map {|x| x.is_a?(Hash) ? x.to_os : x }
    end
 end
 
