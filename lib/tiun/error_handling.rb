@@ -1,6 +1,8 @@
 module Tiun::ErrorHandling
    extend ActiveSupport::Concern
 
+   STATUSES = Rack::Utils::SYMBOL_TO_STATUS_CODE.dup
+
    included do
       rescue_from Exception, with: :server_error
       rescue_from ActionView::MissingTemplate, with: :missing_template
@@ -51,6 +53,7 @@ module Tiun::ErrorHandling
       res = { status: code, json: {} }
 
       res[:json][:args] = args if args.present?
+      res[:json][:status] = STATUSES[code] if STATUSES[code].to_i >= 400
 
       if errors = @object && @object.errors.any? && @object.errors.to_a
          res[:json][:errors] = errors
@@ -62,7 +65,7 @@ module Tiun::ErrorHandling
 
          logger.error(trace) if defined?(logger)
 
-         res[:json][:trace] = trace
+         # res[:json][:trace] = trace
       end
 
       args.present? || errors.present? ? render(**res) : head(code)
