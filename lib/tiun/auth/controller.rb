@@ -116,9 +116,7 @@ module Tiun::Auth::Controller
    end
 
    def default_arg
-      self.class.instance_variable_get(:@default_arg)&.[](action_name) || "id"
-   rescue NameError
-      "id"
+      self.class.instance_variable_get(:@default_arg)&.[](action_name) || account_model.primary_key
    end
 
    def fetch_token
@@ -155,8 +153,8 @@ module Tiun::Auth::Controller
             @token.tokenable
          elsif !arg_name
             account_model.find(params[account_model.primary_key])
-         elsif account_model.respond_to?("by_credentials_or_id")
-            account_model.by_credentials_or_id(parms[arg_name]).first
+         elsif account_model.respond_to?("by_credentials_or_primary_key")
+            account_model.by_credentials_or_primary_key(parms[arg_name]).first
          else
             account_model.where({ arg_name => parms[arg_name] }).first
          end
