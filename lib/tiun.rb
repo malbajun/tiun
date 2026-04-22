@@ -108,7 +108,7 @@ module Tiun
       # => "api/v1/session" inferred from path
       def controller_name_base_for context
          context.controller ||
-            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/(?<ccc>create|ac)|(?<cccc>[^:]+)(?:(?<ccccc>.*))?)).json} =~ context.path
+            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/(?<ccc>create)|(?<cccc>[^:]+)(?:(?<ccccc>.*))?)).json} =~ context.path
                (c || cc || cccc).chomp('/')
             elsif type = find_type(kind_for(context))
                type.controller || type.model || type.name
@@ -120,7 +120,7 @@ module Tiun
       # => "api/v1/session" => api_v1_session inferred from path
       def as_prefix_base_for context
          context.as ||
-            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/(?<ccc>create|ac)|(?<cccc>[^:]+))).json} =~ context.path
+            if %r{^(?:/(?<c>.+)/:[^/]+|/(?:(?<cc>[^:]+)/(?<ccc>create)|(?<cccc>[^:]+))).json} =~ context.path
                if c
                   c.singularize
                elsif cc
@@ -310,9 +310,8 @@ module Tiun
 
       def string_eval string, name
          tokens = name.split("::")[0...-1]
-         default = tokens[0].blank? && Object || Object.const_get(tokens[0])
 
-         (tokens[1..-1] || []).reduce(default) do |o, token|
+         tokens.reduce(Object) do |o, token|
             o.constants.include?(token.to_sym) && o.const_get(token) || o.const_set(token, Module.new)
          end
 
@@ -489,8 +488,11 @@ module Tiun
       end
 
       def base_model name = nil
+        #binding.pry
          base_models[name] ||= table_exist?(name) ?
             (defined?(ApplicationRecord) ?  ApplicationRecord : ActiveRecord::Base) : ActiveModel::Model
+
+         #ActiveRecord::Base.ancestors.select {|x| x.class.to_s == "Module" && x.name =~ /ActiveRecord::/ }.each {|x| User.include(x) }
       end
 
       def base_controller
