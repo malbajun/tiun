@@ -85,7 +85,15 @@ module Tiun::Base
    end
 
    def model_name
-      @_model_name ||= Tiun.find_type(action_context.kind)&.model || super
+      @_model_name ||=
+         Tiun.find_type(action_context.kind)&.model ||
+         self.class.to_s.gsub(/.*::/, "").gsub("Controller", "").singularize
+   end
+
+   def model
+      @_model ||= model_name.constantize
+   rescue NameError
+      User
    end
 
    def param_name
@@ -132,9 +140,19 @@ module Tiun::Base
             (action_context.args || []).reject { |x| x.hidden }.map do |x|
                names = [x.name] | (x.alias ? x.alias.split(/\s*,\s*/) : [])
 
-               x.kind == 'json' ? names.reduce({}) {|r, n| r.merge(n => {}) } : names
+               case x.kind
+               when /array/
+                  names.reduce({}) {|r, n| r.merge(n => []) }
+               when /json/
+                  names.reduce({}) {|r, n| r.merge(n => {}) }
+               else
+                  names
+               end
             end.flatten(1)
-         end
+         end#.map do |x|
+            # wheither attribute is array
+            # model.type_for_attribute(x).respond_to?(:delimiter) ? { x => [] } : x
+         #end
    end
 
    def permitted_children
@@ -245,7 +263,12 @@ module Tiun::Base
    end
 
    def current_attrs
-      params.require(param_name).permit(*permitted_self, **permitted_children).to_h
+      case action_name
+      when 'update', 'create'
+         params.require(param_name).permit(*permitted_self, **permitted_children).to_h
+      else
+         {}
+      end
    end
 
    def context_attributes attrs = current_attrs
