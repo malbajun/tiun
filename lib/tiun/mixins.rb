@@ -1,3 +1,5 @@
+require 'ostruct'
+
 class Object
    def blank?
       case self
@@ -17,13 +19,15 @@ class Object
          if self.is_a?(OpenStruct)
             self
          else
-            OpenStruct.new(self.to_h.map {|(x, y)| [x.to_s, y.respond_to?(:map) && y.to_os || y] }.to_h)
+            self.to_h.reduce(OpenStruct.new) do |os, (x, y)|
+               os[x.to_s] = y.respond_to?(:map) && y.to_os || y
+
+               os
+            end
          end
       else
          OpenStruct.new("" => self)
       end
-   rescue
-      binding.pry
    end
 end
 
