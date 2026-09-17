@@ -31,9 +31,40 @@ class Object
    end
 end
 
+class Hash
+   def to_h *args
+      self.reduce({}) do |res, (key, value_in)|
+         value =
+            case value_in
+            when Hash, OpenStruct
+               value_in.to_h
+            when Array
+               value_in.to_a
+            else
+               value_in
+            end
+
+         res.merge({key => value})
+      end
+   end
+end
+
 class Array
    def to_os
-      self.map {|x| x.is_a?(Hash) ? x.to_os : x }
+      self.map {|x| (x.is_a?(Hash) || x.is_a?(Array)) ? x.to_os : x }
+   end
+
+   def to_a
+      self.map do |value|
+         case value
+         when Hash, OpenStruct
+            value.to_h
+         when Array
+            value.to_a
+         else
+            value
+         end
+      end
    end
 end
 
@@ -65,6 +96,23 @@ class OpenStruct
 
       res
    end
+
+   def to_h *args
+      self.reduce({}) do |res, key, value_in|
+         value =
+            case value_in
+            when Hash, OpenStruct
+               value_in.to_h
+            when Array
+               value_in.to_a
+            else
+               value_in
+            end
+
+         res.merge({key => value})
+      end
+   end
+
 
    # +deep_merge+ deeply merges the Open Struct hash structure with the +other_in+ enumerating it key by key.
    # +options+ are the options to change behaviour of the method. It allows two keys: :mode, and :dedup
