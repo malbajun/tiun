@@ -27,7 +27,7 @@ module Tiun::Base
       respond_to do |format|
          format.html { render :index }
          format.json { render status: code, json: serialize_collection(paged_objects) }
-         format.jsonp { render status: code, json: serialize_collection(paged_objects) }
+         format.yaml { render status: code, yaml: serialize_collection(paged_objects).to_yaml }
          format.any { render status: code, json: serialize_collection(paged_objects), content_type: 'application/json' }
       end
    end
@@ -39,7 +39,7 @@ module Tiun::Base
       respond_to do |format|
          format.html
          format.json { reloaded_object ? render(json: serialize(reloaded_object)) : head(:ok) }
-         format.jsonp { head :ok }
+         format.yaml { head :ok }
          format.any { render json: serialize(reloaded_object), content_type: 'application/json' }
       end
    end
@@ -51,7 +51,7 @@ module Tiun::Base
       respond_to do |format|
          format.html
          format.json { render json: serialize(reloaded_object) }
-         format.jsonp { head :ok }
+         format.yaml { head :ok }
          format.any { render json: serialize(reloaded_object), content_type: 'application/json' }
       end
    end
@@ -61,7 +61,7 @@ module Tiun::Base
       respond_to do |format|
          format.html
          format.json { render json: serialize(object) }
-         format.jsonp { render json: serialize(object) }
+         format.yaml { render yaml: serialize(object).to_yaml }
          format.any { render json: serialize(object), content_type: 'application/json' }
       end
    end
@@ -73,7 +73,7 @@ module Tiun::Base
       respond_to do |format|
          format.html
          format.json { render json: @answer }
-         format.jsonp { head :ok }
+         format.yaml { head :ok }
          format.any { render json: @answer, content_type: 'application/json' }
       end
    end
