@@ -51,12 +51,16 @@ module Tiun
 
    class << self
       def setup
-         if defined?(::Rails) && ::Rails.root && !@config
+         unless @config
             files = Dir.glob(::Rails.root&.join("config", "tiun", "*.{yml,yaml}")) |
                     Dir.glob(::Rails.root&.join("config", "tiun.{yml,yaml}"))
 
             setup_with(*files)
-         end
+
+            true
+         else
+            false
+         end if defined?(::Rails) && ::Rails.root
       end
 
       def setup_if_not
@@ -64,7 +68,7 @@ module Tiun
       end
 
       def setup_with *files
-         setup_migrations
+         # setup_migrations
 
          files.each do |file|
             config = append_config(file)
@@ -318,6 +322,35 @@ module Tiun
          eval(string)
       end
 
+      def value_eval_deep value
+         case value
+         when String
+            if /@(?<ev>[^@]+)@/ =~ value
+               value_tmp = ev.split('.').reduce(Object) do |res, token|
+                  if /^[A-Z]/ =~ token
+                     token.constantize
+                  elsif res.respond_to?(token)
+                     res.send(token)
+                  else
+                     raise("Can't apply '#{token}' to object #{res}")
+                  end
+               end
+
+               value_tmp.is_a?(Proc) ? value_tmp[] : value_tmp
+            else
+               value
+            end
+         when OpenStruct
+            value.reduce(OpenStruct.new) {|res, x, y| res.merge({x => value_eval_deep(y)}.to_os) }
+         when Hash
+            value.reduce({}) {|res, (x, y)| res.merge(x => value_eval_deep(y)) }
+         when Array
+            value.map {|x| value_eval_deep(x) }
+         else
+            value
+         end
+      end
+
       def config_reduce config, default
          config.resources.reduce(default) do |res, context|
             if context.name.is_a?(String)
@@ -333,7 +366,7 @@ module Tiun
       end
 
       def load_defaults_from config
-         @defaults = defaults.to_h.merge(config.defaults.to_h).to_os
+         @defaults = defaults.deep_merge(config.defaults) if config.defaults
       end
 
       def parse_objects kind, config
@@ -458,8 +491,14 @@ module Tiun
       end
 
       def append_config file
-         c = YAML.load(IO.read( file )).to_os
-         config[ File.expand_path( file )] = c
+         config_in = YAML.load(IO.read( file )).to_os
+         config[ File.expand_path( file )] =
+            config_in.reduce(OpenStruct.new) do |res, k, v|
+               res[k] = value_eval_deep(v)
+
+               res
+            end
+
       end
 
       def settings
