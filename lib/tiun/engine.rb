@@ -8,17 +8,20 @@ class Tiun::Engine < ::Rails::Engine
 
    engine_name 'tiun'
 
-   paths["app"] << "lib"
-   paths["app/controllers"] << "lib"
-   paths["app/views"] << "lib"
-   paths["config/routes.rb"]  << "lib/config/routes.rb"
+   paths["app"] << "#{config.root}/lib"
+   paths["app/controllers"] << "#{config.root}/lib"
+   paths["app/views"] << "#{config.root}/lib"
+   paths["config/routes.rb"]  << "#{config.root}/lib/config/routes.rb"
 
    config.i18n.load_path += Dir[Tiun::Engine.root.join('lib', 'config', 'locale', '**', '*.{yaml,yml}')]
 
+   config.autoload_paths += Dir["#{config.root}/lib"]
+   config.autoload_paths += Dir["#{config.root}/lib/config"]
+
    config.to_prepare do
-      ::ActiveRecord::Base.extend(Tiun::Model)
-      Tiun.setup
+      ActiveSupport.on_load(:active_record) do
+         Tiun.setup
+         extend Tiun::Model
+      end
    end
 end
-
-Engine = Tiun::Engine
