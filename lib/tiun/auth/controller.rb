@@ -113,7 +113,6 @@ module Tiun::Auth::Controller
       @_context ||= {
          except: supplement_names,
          locales: locales,
-         languages: @languages,
       }
    end
 

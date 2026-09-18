@@ -1,4 +1,4 @@
-# cuccon auth methods for all controllers
+# common auth methods for all controllers
 module Tiun::Auth
    extend ActiveSupport::Concern
 
@@ -21,16 +21,6 @@ module Tiun::Auth
 
    def authenticate_user
       current_user
-   end
-
-   def model_name
-      @_model_name ||= self.class.to_s.gsub(/.*::/, "").gsub("Controller", "").singularize
-   end
-
-   def model
-      @_model ||= model_name.constantize
-   rescue NameError
-      User
    end
 
    def tiun_context
