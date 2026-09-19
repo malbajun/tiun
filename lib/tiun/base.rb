@@ -18,8 +18,6 @@ module Tiun::Base
       before_action :generate_answer, only: %i(destroy)
       before_action :parse_range, only: %i(index)
       after_action :return_range, only: %i(index)
-
-      rescue_from ActiveRecord::RecordNotFound, InvalidParamNameError, with: :not_found
    end
 
    # GET /<objects>/

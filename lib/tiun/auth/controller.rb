@@ -14,6 +14,8 @@ module Tiun::Auth::Controller
       include Tiun::Auth
       include Tiun::ErrorHandling
 
+      proceed_when "ActiveRecord::RecordNotFound", with: :unauthorized
+
       protect_from_forgery only: :create, with: :exception, prepend: true
 
       # before_action :set_languages
@@ -22,13 +24,6 @@ module Tiun::Auth::Controller
       after_action :obsolete_token, only: %i(update show destroy)
       after_action :session_update, only: %i(create update show destroy)
       after_action :drop_auth, only: %i(destroy)
-
-      rescue_from UnauthorizedError, with: :unauthorized
-      rescue_from ActiveRecord::RecordNotFound,
-                  Tiun::Model::Account::InvalidPasswordError,
-                  ActionController::InvalidAuthenticityToken,
-                  UnauthenticatedError, with: :unauthenticated
-      rescue_from NoTokenError, InvalidTokenError, with: :not_found
    end
 
    # POST /session.json

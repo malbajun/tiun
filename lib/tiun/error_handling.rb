@@ -1,75 +1,75 @@
-module Tiun::ErrorHandling
-   extend ActiveSupport::Concern
+module Tiun
+   module ErrorHandling
+      extend ActiveSupport::Concern
 
-   STATUSES = Rack::Utils::SYMBOL_TO_STATUS_CODE.dup
+      STATUSES = Rack::Utils::SYMBOL_TO_STATUS_CODE.dup
+      EXCEPTIONS = Hash.new { |this, key| this[key] = :internal_server_error }.merge(
+         "ActionController::ParameterMissing" => :internal_server_error, # parameter missing
+         "ActionController::InvalidAuthenticityToken" => :unauthorized,
+         "ActiveRecord::RecordNotUnique" => :unprocessable_entity,
+         "ActiveRecord::RecordInvalid" => :unprocessable_entity,
+         "ActiveRecord::RecordNotSaved" => :unprocessable_entity,
+         "ActiveRecord::RecordNotFound" => :not_found,
+         "ActionView::MissingTemplate" => :internal_server_error, # missing template
+         "CarrierWave::IntegrityError" => :unprocessable_entity,
+         "Tiun::Base::InvalidParamNameError" => :not_found,
+         "Tiun::Base::OutOfRangeError" => :range_not_satisfiable, # out of range
+         "Tiun::Model::Account::InvalidPasswordError" => :unauthorized,
+         "Tiun::Model::Auth::InvalidTokenError" => :unauthorized, # not authenticated
+         "Tiun::Policy::NotAuthorizedError" => :forbidden, # not authorized
+         "Tiun::Auth::Controller::UnauthorizedError" => :forbidden,
+         "Tiun::Auth::Controller::UnauthenticatedError" => :unauthorized,
+         "Tiun::Auth::Controller::NoTokenError" => :not_found,
+         "Tiun::Auth::Controller::InvalidTokenError" => :not_found)
 
-   included do
-      rescue_from Exception, with: :server_error
-      rescue_from ActionView::MissingTemplate, with: :missing_template
-      rescue_from ActionController::ParameterMissing, with: :parameter_missing
-      rescue_from ActiveRecord::RecordNotUnique,
-                  ActiveRecord::RecordInvalid,
-                  ActiveRecord::RecordNotSaved,
-                  CarrierWave::IntegrityError, with: :unprocessable_entity
-      rescue_from Tiun::Base::OutOfRangeError, with: :out_of_range
-      rescue_from Tiun::Model::Auth::InvalidTokenError, with: :unauthenticated
-      rescue_from Tiun::Policy::NotAuthorizedError, with: :unauthorized
-   end
+      included do
+         extend self::SingularMethods
 
-   def unauthenticated _e
-      render_code :unauthorized
-   end
-
-   def unauthorized _e
-      render_code :forbidden
-   end
-
-   def not_found _e
-      render_code :not_found
-   end
-
-   def out_of_range _e
-      render_code :range_not_satisfiable
-   end
-
-   def unprocessable_entity _e
-      render_code :unprocessable_entity
-   end
-
-   def parameter_missing e
-      render_code :internal_server_error, e
-   end
-
-   def missing_template e
-      render_code :internal_server_error, e
-   end
-
-   def server_error e
-      render_code :internal_server_error, e
-   end
-
-   def render_code code, e = nil
-      args = params.permit(*permitted_filter).to_h rescue {}
-      res = { status: code, json: {} }
-
-      res[:json][:args] = args if args.present?
-      res[:json][:status] = STATUSES[code] if STATUSES[code].to_i >= 400
-
-      if errors = @object && @object.errors.any? && @object.errors.to_a
-         res[:json][:errors] = errors
+         rescue_from Exception, with: :render_exception
       end
 
-      if e
-         /`(?<method>(?:with_(?<rela>\w+)|[^']*))'/ =~ caller.grep(%r{tiun/base})[1]
-         trace = "[#{e.class}]{#{method}}> #{e.message} \n\t #{e.backtrace.join("\n\t")}"
+      def code_for e
+         exceptions =
+            Tiun::ErrorHandling::EXCEPTIONS.merge(
+               self.class.respond_to?(:proceed_list) ? self.class.proceed_list : {})
 
-         logger.error(trace) if defined?(logger)
-
-         # res[:json][:trace] = trace
+         exceptions[e.class.to_s]
       end
 
-      args.present? || errors.present? ? render(**res) : head(code)
+      def render_exception e
+         code = code_for(e)
+         args = params.permit(*permitted_filter).to_h rescue {}
+         res = { status: code, json: {} }
+
+         res[:json][:args] = args if args.present?
+         res[:json][:status] = STATUSES[code] if STATUSES[code].to_i >= 400
+
+         if errors = @object && @object.errors.any? && @object.errors.to_a
+            res[:json][:errors] = errors
+         end
+
+         if e && res[:json][:status] >= 500
+            /`(?<method>(?:with_(?<rela>\w+)|[^']*))'/ =~ caller.grep(%r{tiun/base})[1]
+            trace = "[#{e.class}]{#{method}}> #{e.message} \n\t #{e.backtrace.join("\n\t")}"
+
+            logger.error(trace) if defined?(logger)
+
+            # res[:json][:trace] = trace
+         end
+
+         args.present? || errors.present? ? render(**res) : head(code)
+      end
+
+      module SingularMethods
+         def proceed_list
+            @proceed_list ||= {}
+         end
+
+         def proceed_when *exceptions, with: nil
+            exceptions.each do |exception|
+               proceed_list[exception] = with
+            end if with
+         end
+      end
    end
 end
-
-ErrorHandling = Tiun::ErrorHandling

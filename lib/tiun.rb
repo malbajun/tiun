@@ -22,6 +22,10 @@ module Tiun
    extend Tiun::Migration
    extend Tiun::Attributes
 
+   #%w(ErrorHandling).each do |name|
+   #   autoload(:"#{name}", File.expand_path(File.dirname(__FILE__) + "/tiun/#{name.tableize.singularize}"))
+   #end
+
    MAP = {
       'get' => {
          %r{(?:/(?<c>[^/]+)/:[^/]+).json} => 'show',
