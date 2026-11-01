@@ -213,7 +213,7 @@ module Tiun
                   arg.context
                end
 
-            key ? attrs.merge(key => [arg.name] | (arg.alias ? arg.alias.split(/\s*,\s*/) : [])) : attrs
+            key ? attrs.merge(key => [arg.name] | (arg.alias&.split(/\s*,\s*/)||[])) : attrs
          end
       end
 

@@ -300,7 +300,7 @@ module Tiun::Base
       attrs.reduce(object) do |o, (key, value)|
          if o.respond_to?("#{key}=")
             o.send("#{key}=", value)
-         else
+         else # just set variable for the object
             o.instance_variable_set(:"@#{key}", value)
          end
 
