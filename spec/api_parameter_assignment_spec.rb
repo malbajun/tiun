@@ -39,7 +39,7 @@ RSpec.describe 'Tiun API parameter assignment' do
       expect(value).not_to respond_to(:place_uno=)
    end
 
-   it 'assigns context variables even when the model stores attributes separately' do
+   it 'uses an existing setter without creating a duplicate instance variable' do
       value = Object.new
       stored = {}
       value.define_singleton_method(:language_code=) { |code| stored[:language_code] = code }
@@ -47,7 +47,7 @@ RSpec.describe 'Tiun API parameter assignment' do
       allow(controller).to receive(:current_attrs).and_return('language_code' => 'ру')
       controller.send(:assign_attributes)
       expect(stored).to eq(language_code: 'ру')
-      expect(value.instance_variable_get(:@language_code)).to eq('ру')
+      expect(value.instance_variable_defined?(:@language_code)).to eq(false)
    end
    it 'prefers the canonical parameter when an alias is also supplied' do
       allow(controller).to receive(:params).and_return(ActionController::Parameters.new(event: {language_code: 'ру', l: 'гр'}))
@@ -62,7 +62,7 @@ RSpec.describe 'Tiun API parameter assignment' do
       allow(controller).to receive(:params).and_return(ActionController::Parameters.new(t: 'Building'))
       relation = double('relation')
       filtered = double('filtered relation')
-      expect(relation).to receive(:where).with('type' => 'Building').and_return(filtered)
+      expect(relation).to receive(:where).with({'type' => 'Building'}).and_return(filtered)
       expect(controller.send(:apply_by_names, ['type', 't'], relation, 't')).to equal(filtered)
    end
 
@@ -76,14 +76,14 @@ RSpec.describe 'Tiun API parameter assignment' do
       expect(value.instance_variable_defined?(:@language_code)).to eq(false)
    end
 
-   it 'makes the request context available before model setters run' do
+   it 'applies configured defaults and lets request values override them' do
       value = Object.new
-      observed = nil
-      value.define_singleton_method(:short_name=) { |_name| observed = instance_variable_get(:@language_code) }
       allow(controller).to receive(:object).and_return(value)
-      allow(controller).to receive(:current_attrs).and_return('short_name' => 'Имя', 'language_code' => 'ру')
+      allow(controller).to receive(:default_attributes).and_return(place_uno: 'Иное', fallback: false)
+      allow(controller).to receive(:current_attrs).and_return('place_uno' => 'Град')
       controller.send(:assign_attributes)
-      expect(observed).to eq('ру')
+      expect(value.instance_variable_get(:@place_uno)).to eq('Град')
+      expect(value.instance_variable_get(:@fallback)).to eq(false)
    end
 
    it 'passes only the permitted STI discriminator to the model constructor' do

@@ -279,21 +279,19 @@ module Tiun::Base
    end
 
    def context_attributes attrs = current_attrs
-      action_context.contexted_attributes.to_h.each_with_object({}) do |(key, names), context|
-         name = names.find { |candidate| attrs.key?(candidate) && !attrs[candidate].nil? }
-         context[key.to_sym] = attrs[name] if name
-      end
+      action_context.contexted_attributes.to_h.map do |key, names|
+         value = names.reduce(nil) { |r, name| r.nil? ? attrs[name] : r }
+         [key.to_sym, value] unless value.nil?
+      end.compact.to_h
    end
 
    def assign_attributes
-      defaults = respond_to?(:default_attributes) ? default_attributes : {}
-      attrs = defaults.stringify_keys.merge(current_attrs)
-      tiun_args.each do |arg|
-         if arg.context && attrs.key?(arg.name)
-            object.instance_variable_set(:"@#{arg.name}", attrs[arg.name])
-         end
-      end
-      assign_attributes_for(object, attrs)
+      default_attributes =
+        respond_to?(:default_attributes) ? self.default_attributes.merge(context_attributes).map do |(key, value)|
+            [key.to_s, value]
+         end.to_h : {}
+
+      assign_attributes_for(object, default_attributes.merge(current_attrs))
    end
 
    def assign_attributes_for object, attrs
@@ -374,20 +372,23 @@ module Tiun::Base
    end
 
    def apply_by_names names, rel, arg
-      names.each do |attr_name|
+      names.reduce(rel) do |rel, attr_name|
          if model.respond_to?("by_#{attr_name}")
             begin
-               return rel.send("by_#{attr_name}", params[arg], current_context)
+               break rel.send("by_#{attr_name}", params[arg], current_context)
             rescue ArgumentError
-               return rel.send("by_#{attr_name}", params[arg])
+               break rel.send("by_#{attr_name}", params[arg])
             end
-         elsif model.respond_to?(attr_name) && params[arg] =~ /^true|t$/
-            return rel.send(attr_name)
+         elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/
+            break rel.send(attr_name)
          elsif model.attribute_names.include?(attr_name)
-            return rel.where(attr_name => params[arg])
+            # TODO protect params[arg] is non string or integer
+            break rel.where({ attr_name => params[arg] })
+         else
+            # Kernel.puts "WARN: Invalid scope by property '#{attr_name}'"
+            rel
          end
       end
-      rel
    end
 
    # +with_others+ collects relation with "with_" methods defiend in the scheme
