@@ -253,7 +253,9 @@ module Tiun::Base
    end
 
    def new_object
-      @object = model.new
+      discriminator = model.inheritance_column
+      attributes = model.column_names.include?(discriminator) ? current_attrs.slice(discriminator) : {}
+      @object = model.new(attributes)
    end
 
    def generate_answer
@@ -263,30 +265,42 @@ module Tiun::Base
    def current_attrs
       case action_name
       when 'update', 'create'
-         params.require(param_name).permit(*permitted_self, **permitted_children).to_h
+         supplied = params.require(param_name).permit(*permitted_self, **permitted_children).to_h
+         supplied.each_with_object({}) do |(name, value), attrs|
+            argument = tiun_args.find do |arg|
+               ([arg.name] + (arg.alias ? arg.alias.split(/\s*,\s*/) : [])).include?(name)
+            end
+            key = argument ? argument.name : name
+            attrs[key] = value unless attrs.key?(key) && name != key
+         end
       else
          {}
       end
    end
 
    def context_attributes attrs = current_attrs
-      action_context.contexted_attributes.map {|_, names| names.reduce(nil) {|r, name| r || attrs[name] }}.to_h
+      action_context.contexted_attributes.to_h.each_with_object({}) do |(key, names), context|
+         name = names.find { |candidate| attrs.key?(candidate) && !attrs[candidate].nil? }
+         context[key.to_sym] = attrs[name] if name
+      end
    end
 
    def assign_attributes
-      default_attributes =
-        respond_to?(:default_attributes) ? self.default_attributes.merge(context_attributes).map do |(key, value)|
-            [key.to_s, value]
-         end.to_h : {}
-
-      assign_attributes_for(object, default_attributes.merge(current_attrs))
+      defaults = respond_to?(:default_attributes) ? default_attributes : {}
+      attrs = defaults.stringify_keys.merge(current_attrs)
+      tiun_args.each do |arg|
+         if arg.context && attrs.key?(arg.name)
+            object.instance_variable_set(:"@#{arg.name}", attrs[arg.name])
+         end
+      end
+      assign_attributes_for(object, attrs)
    end
 
    def assign_attributes_for object, attrs
       attrs.reduce(object) do |o, (key, value)|
          if o.respond_to?("#{key}=")
             o.send("#{key}=", value)
-         else # just set variable for the object
+         else
             o.instance_variable_set(:"@#{key}", value)
          end
 
@@ -333,7 +347,7 @@ module Tiun::Base
    def apply_scope rela = self.model.default_scoped, args = []
       args.reduce(rela) do |rel, arg_in|
          arg_prop = tiun_args.find { |x| arg_in == x.name }
-         names = [arg_prop&.source || arg_in, arg_prop&.alias&.split(',')].flatten.compact
+         names = [arg_prop&.source || arg_in, arg_prop&.alias&.split(/\s*,\s*/)].flatten.compact
          param_names = params.keys & names
 
          next rel unless param_names.any? && !is_arg_requires_skip?(arg_in)
@@ -360,23 +374,20 @@ module Tiun::Base
    end
 
    def apply_by_names names, rel, arg
-      names.reduce(rel) do |rel, attr_name|
+      names.each do |attr_name|
          if model.respond_to?("by_#{attr_name}")
             begin
-               rel.send("by_#{attr_name}", params[arg], current_context)
+               return rel.send("by_#{attr_name}", params[arg], current_context)
             rescue ArgumentError
-               rel.send("by_#{attr_name}", params[arg])
+               return rel.send("by_#{attr_name}", params[arg])
             end
-         elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/
-            rel.send(attr_name)
+         elsif model.respond_to?(attr_name) && params[arg] =~ /^true|t$/
+            return rel.send(attr_name)
          elsif model.attribute_names.include?(attr_name)
-            # TODO protect params[arg] is non string or integer
-            rel.where({ attr_name => params[arg] })
-         else
-            # Kernel.puts "WARN: Invalid scope by property '#{attr_name}'"
-            rel
+            return rel.where(attr_name => params[arg])
          end
       end
+      rel
    end
 
    # +with_others+ collects relation with "with_" methods defiend in the scheme
