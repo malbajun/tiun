@@ -253,7 +253,9 @@ module Tiun::Base
    end
 
    def new_object
-      @object = model.new
+      discriminator = model.inheritance_column
+      attributes = model.column_names.include?(discriminator) ? current_attrs.slice(discriminator) : {}
+      @object = model.new(attributes)
    end
 
    def generate_answer
@@ -263,14 +265,24 @@ module Tiun::Base
    def current_attrs
       case action_name
       when 'update', 'create'
-         params.require(param_name).permit(*permitted_self, **permitted_children).to_h
+         supplied = params.require(param_name).permit(*permitted_self, **permitted_children).to_h
+         supplied.each_with_object({}) do |(name, value), attrs|
+            argument = tiun_args.find do |arg|
+               ([arg.name] + (arg.alias ? arg.alias.split(/\s*,\s*/) : [])).include?(name)
+            end
+            key = argument ? argument.name : name
+            attrs[key] = value unless attrs.key?(key) && name != key
+         end
       else
          {}
       end
    end
 
    def context_attributes attrs = current_attrs
-      action_context.contexted_attributes.map {|_, names| names.reduce(nil) {|r, name| r || attrs[name] }}.to_h
+      action_context.contexted_attributes.to_h.map do |key, names|
+         value = names.reduce(nil) { |r, name| r.nil? ? attrs[name] : r }
+         [key.to_sym, value] unless value.nil?
+      end.compact.to_h
    end
 
    def assign_attributes
@@ -333,7 +345,7 @@ module Tiun::Base
    def apply_scope rela = self.model.default_scoped, args = []
       args.reduce(rela) do |rel, arg_in|
          arg_prop = tiun_args.find { |x| arg_in == x.name }
-         names = [arg_prop&.source || arg_in, arg_prop&.alias&.split(',')].flatten.compact
+         names = [arg_prop&.source || arg_in, arg_prop&.alias&.split(/\s*,\s*/)].flatten.compact
          param_names = params.keys & names
 
          next rel unless param_names.any? && !is_arg_requires_skip?(arg_in)
@@ -363,15 +375,15 @@ module Tiun::Base
       names.reduce(rel) do |rel, attr_name|
          if model.respond_to?("by_#{attr_name}")
             begin
-               rel.send("by_#{attr_name}", params[arg], current_context)
+               break rel.send("by_#{attr_name}", params[arg], current_context)
             rescue ArgumentError
-               rel.send("by_#{attr_name}", params[arg])
+               break rel.send("by_#{attr_name}", params[arg])
             end
          elsif model.respond_to?("#{attr_name}") && params[arg] =~ /^true|t$/
-            rel.send(attr_name)
+            break rel.send(attr_name)
          elsif model.attribute_names.include?(attr_name)
             # TODO protect params[arg] is non string or integer
-            rel.where({ attr_name => params[arg] })
+            break rel.where({ attr_name => params[arg] })
          else
             # Kernel.puts "WARN: Invalid scope by property '#{attr_name}'"
             rel
