@@ -296,7 +296,9 @@ module Tiun::Base
 
    def assign_attributes_for object, attrs
       attrs.reduce(object) do |o, (key, value)|
-         if o.respond_to?("#{key}=")
+         if action_context.ignore_primary_key && o.primary_key == key.to_s
+            o
+         elsif o.respond_to?("#{key}=")
             o.send("#{key}=", value)
          else # just set variable for the object
             o.instance_variable_set(:"@#{key}", value)
